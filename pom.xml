@@ -98,6 +98,7 @@
         <maven-toolchains-plugin.version>3.0.0</maven-toolchains-plugin.version>
         <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
         <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
         <license-maven-plugin.version>5.0.0</license-maven-plugin.version>
         <versions-maven-plugin.version>2.19.1</versions-maven-plugin.version>
@@ -559,4 +560,52 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Signing lives in a profile because Central is the only thing that needs it: an everyday
+             `mvn install` must not want a private key, and a machine without one must still be able to
+             build the project. `mvn -Prelease install` signs. -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <!-- The primary key, not the subkey: gpg resolves it to whichever signing
+                                 subkey is currently valid, so a subkey rotation - the one here expires
+                                 in 2030 - does not mean editing this pom. -->
+                            <keyname>37FDB8617EFE2DED</keyname>
+                            <!-- Refuse a passphrase that arrived from settings.xml or the command line.
+                                 The supported route is the MAVEN_GPG_PASSPHRASE environment variable
+                                 (or a primed gpg-agent on a workstation), which keeps it off disk and
+                                 out of shell history. The plugin will enforce this by default in a
+                                 future release; turning it on now means finding out here rather than
+                                 during a release. -->
+                            <bestPractices>true</bestPractices>
+                            <gpgArguments>
+                                <!-- Without this, gpg wants to ask for the passphrase through a
+                                     pinentry dialog. On a CI runner there is no one to answer it and
+                                     nothing to draw it on, so the signing step hangs until the job
+                                     times out. Loopback makes gpg read what the plugin hands it. -->
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

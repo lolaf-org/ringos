@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2024-2026 Lolaf.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-unsafe-operations-impl-25</artifactId>
+
+    <name>Ringos Unsafe Operations (JDK 25+)</name>
+    <packaging>pom</packaging>
+
+    <description>
+        Java 25+ UnsafeOperations, split so the two concerns can compile to different class-file versions:
+        the "impl" module holds the Java 25 implementation (Java 25 bytecode), and the "provider" module holds
+        the SPI provider compiled to Java 11 bytecode so it loads on any JDK and selects the implementation.
+    </description>
+
+    <modules>
+        <module>impl</module>
+        <module>provider</module>
+    </modules>
+</project>

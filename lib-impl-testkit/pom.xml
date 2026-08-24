@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2024-2026 Lolaf.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-lib-impl-testkit</artifactId>
+
+    <name>Ringos Ring Buffer Test Kit</name>
+
+    <description>
+        The shared contract every RingBuffer implementation must satisfy, shipped as a test-jar. Each
+        implementation module (unsafe, unsafe-11, method-handle) subclasses these abstract tests and supplies its
+        own RingBufferBuilder, so a behavioural difference between implementations fails the build rather than
+        hiding behind a copy of the tests that was only updated in one place.
+    </description>
+
+    <properties>
+        <maven.compiler.release>11</maven.compiler.release>
+        <automatic.module.name>org.lolaf.ringos.rb.testkit</automatic.module.name>
+        <!-- Everything lives in src/test/java, so there is nothing for delombok or javadoc to read. -->
+        <delombok.skip>true</delombok.skip>
+        <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <!-- D5: the contract tests have no audience outside this repo, and every implementation of
+             them is in it. Not deploying is also what keeps the module exempt from Central's
+             sources/javadoc requirement, which it could only meet with a placeholder. Publishing it
+             later is not a breaking change, so an external implementer is reason enough to revisit. -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-api</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The abstract tests are the artifact: publish them as a test-jar for the implementation
+                 modules to subclass. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                        <configuration>
+                            <archive>
+                                <!-- The parent sets this on the default-jar execution, which the
+                                     test-jar goal is not; without it the module would be named after
+                                     the file. -->
+                                <manifestEntries>
+                                    <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
+                                </manifestEntries>
+                            </archive>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

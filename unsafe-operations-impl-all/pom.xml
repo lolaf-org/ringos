@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2024-2026 Lolaf.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-unsafe-operations-impl-all</artifactId>
+
+    <name>Ringos Unsafe Operations Implementations</name>
+
+    <description>
+        JDK-agnostic aggregator for the UnsafeOperations SPI: bundles every version-specific implementation and
+        selects the right one at runtime. Depend on this single artifact instead of a specific
+        unsafe-operations-impl-* module. Compiled to the lowest supported class-file version (Java 11) so its
+        provider classes load on every supported JDK; the version-specific implementations are pulled in at
+        runtime and loaded reflectively only when they match the running JDK.
+    </description>
+
+    <!-- Kept at the parent-default Java 11 release: the provider classes here MUST load on every supported JDK. -->
+
+    <properties>
+        <maven.compiler.release>11</maven.compiler.release>
+        <automatic.module.name>org.lolaf.ringos.unsafe.all</automatic.module.name>
+        <!-- Every open any bundled implementation might need, on top of the shared set, so the test works on
+             whichever JDK runs it. jdk.internal.misc and sun.nio.ch are already in the shared set. -->
+        <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/jdk.internal.access=ALL-UNNAMED --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            Runtime-only: these carry the version-specific UnsafeOperations classes (some compiled to newer
+            class-file versions). They are referenced only by class name and loaded reflectively from the
+            matching provider, so they must NOT be a compile dependency of this module.
+        -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-impl-11-14</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-impl-15-24</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- The provider module pulls its (Java 25 bytecode) implementation in transitively at runtime. -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-impl-25-provider</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Central requires a -sources.jar and a -javadoc.jar beside every artifact whose
+                 packaging is not `pom`, and this module has no src/main/java for either plugin to
+                 build one from. `pom` packaging would lift the requirement, but it would also make
+                 every consumer write <type>pom</type> on a dependency whose whole point is being the
+                 one artifact you name — and this module's tests would have no lifecycle to run in.
+                 So Central's other allowance applies: a placeholder jar. Both hold src/placeholder,
+                 which says what the artifact is and where its sources actually live.
+                 Declared here rather than in the parent's pluginManagement, where an added execution
+                 would also fire in lib-impl-testkit, the one other module declaring this plugin. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>placeholder-sources-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>sources</classifier>
+                            <classesDirectory>${project.basedir}/src/placeholder</classesDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>placeholder-javadoc-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>javadoc</classifier>
+                            <classesDirectory>${project.basedir}/src/placeholder</classesDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

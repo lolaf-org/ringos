@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2024-2026 Lolaf.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-lib-impl-all</artifactId>
+
+    <name>Ringos Ring Buffer Implementations</name>
+
+    <properties>
+        <maven.compiler.release>11</maven.compiler.release>
+        <automatic.module.name>org.lolaf.ringos.rb.all</automatic.module.name>
+        <!-- The default-test execution has to prove the MethodHandle fallback is what gets selected when
+             jdk.internal.misc is not opened, so this module's forks do not get that open by default; the
+             second execution adds it back for itself. Blanked here rather than dropped by overriding
+             <argLine>, which would take the @Contended flags with it. -->
+        <surefire.argLine.jdkInternalMisc></surefire.argLine.jdkInternalMisc>
+    </properties>
+
+    <description>
+        Runtime-agnostic aggregator for the RingBuffer implementations: bundles the Unsafe, Java 11 Unsafe and
+        MethodHandle builders and selects one at runtime (Unsafe when java.base/jdk.internal.misc is opened,
+        MethodHandle otherwise). Depend on this single artifact instead of a specific ringos-lib-*-impl module;
+        it also pulls the matching unsafe-operations implementation in transitively.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Runtime-only: the concrete builders, selected reflectively by RingBufferFactory. -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-unsafe</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-unsafe-11</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-method-handle</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- The Unsafe builders delegate to UnsafeOperationsApi at runtime; bundle its implementations too. -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-impl-all</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Test-only: the SPI/API types the integration test compiles against. -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-api</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-testkit</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Central requires a -sources.jar and a -javadoc.jar beside every artifact whose
+                 packaging is not `pom`, and this module has no src/main/java for either plugin to
+                 build one from. `pom` packaging would lift the requirement, but it would also make
+                 every consumer write <type>pom</type> on a dependency whose whole point is being the
+                 one artifact you name — and this module's tests would have no lifecycle to run in.
+                 So Central's other allowance applies: a placeholder jar. Both hold src/placeholder,
+                 which says what the artifact is and where its sources actually live.
+                 Declared here rather than in the parent's pluginManagement, where an added execution
+                 would also fire in lib-impl-testkit, the one other module declaring this plugin. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>placeholder-sources-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>sources</classifier>
+                            <classesDirectory>${project.basedir}/src/placeholder</classesDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>placeholder-javadoc-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>javadoc</classifier>
+                            <classesDirectory>${project.basedir}/src/placeholder</classesDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- ModulePathResolutionTest needs the ringos artifacts as real jars. Resolved dependencies
+                 are jars during `mvn install` but exploded target/classes directories during a bare
+                 `mvn test`, and ModuleFinder would derive the module name "classes" from every one of
+                 them - so copy them somewhere the test can rely on instead of reading the classpath. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>${maven-dependency-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>collect-ringos-jars-for-the-module-path</id>
+                        <phase>process-test-classes</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/module-path</outputDirectory>
+                            <includeGroupIds>org.lolaf.ringos</includeGroupIds>
+                            <includeScope>test</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <ringos.module.path>${project.build.directory}/module-path</ringos.module.path>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <!-- Without the jdk.internal.misc add-opens: the MethodHandle builder must be selected.
+                         The shared argLine carries it, so the module blanks that one piece above rather than
+                         writing an argLine of its own and losing the @Contended flags with it. -->
+                    <execution>
+                        <id>default-test</id>
+                    </execution>
+                    <!-- With the jdk.internal.misc add-opens present: an Unsafe builder must be selected. The
+                         shared set plus the opens the Unsafe path needs, which is why this one execution does
+                         name an argLine - it is adding to ${surefire.argLine}, not replacing it. -->
+                    <execution>
+                        <id>test-with-jdk-internal-misc-open</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <argLine>
+                                ${surefire.argLine}
+                                --add-opens java.base/jdk.internal.misc=ALL-UNNAMED
+                                --add-opens java.base/jdk.internal.ref=ALL-UNNAMED
+                                --add-opens java.base/jdk.internal.access=ALL-UNNAMED
+                                --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED
+                            </argLine>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

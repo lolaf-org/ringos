@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-unsafe-operations-impl-15-24</artifactId>
+
+    <name>Ringos Unsafe Operations (JDK 15-24)</name>
+
+    <description>
+        UnsafeOperations implementation for JDK 15 to 24, using getReference and the
+        Unsafe invokeCleaner that both arrived by then. Depend on ringos-unsafe-operations-impl-all rather than on
+        this directly.
+    </description>
+
+    <properties>
+        <automatic.module.name>org.lolaf.ringos.unsafe.j15</automatic.module.name>
+        <!-- The SharedSecrets opens this implementation reaches through, on top of the shared set. -->
+        <surefire.argLine.extra>--add-opens java.base/jdk.internal.access=ALL-UNNAMED --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
+
+        <!-- No Lombok in this module: javadoc reads src/main/java directly. -->
+        <delombok.skip>true</delombok.skip>
+        <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <!-- needed to have access to jdk.internal.misc.Unsafe and jdk.internal.access.SharedSecrets class -->
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.access=ALL-UNNAMED</arg>
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.access.foreign=ALL-UNNAMED</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <configuration>
+                    <!-- javadoc has to resolve the same JDK internals the compiler is given above. -->
+                    <additionalOptions>
+                        <additionalOption>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</additionalOption>
+                        <additionalOption>--add-exports java.base/jdk.internal.access=ALL-UNNAMED</additionalOption>
+                        <additionalOption>--add-exports java.base/jdk.internal.access.foreign=ALL-UNNAMED</additionalOption>
+                    </additionalOptions>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

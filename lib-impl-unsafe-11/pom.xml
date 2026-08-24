@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-lib-impl-unsafe-11</artifactId>
+
+    <name>Ringos Ring Buffer Implementation (Unsafe, JDK 11)</name>
+
+    <description>
+        RingBuffer implementation built on jdk.internal.misc.Unsafe for JDK 11, the one release
+        whose Unsafe has getObject rather than getReference. Depend on ringos-lib-impl-all rather than on this
+        directly.
+    </description>
+
+    <properties>
+        <automatic.module.name>org.lolaf.ringos.rb.unsafe11</automatic.module.name>
+        <!-- These tests fork the JDK 11 toolchain, which rejects the native-access flag outright
+             ("Unrecognized option: enable-native-access"). Blanking that one piece keeps the rest of the
+             shared argLine, the @Contended flags above all, instead of replacing the whole of it to drop
+             a single argument. -->
+        <surefire.argLine.nativeAccess></surefire.argLine.nativeAccess>
+        <!-- jdk.internal.ref is the one open this module needs that the shared set does not carry. -->
+        <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED</surefire.argLine.extra>
+
+        <!-- No Lombok in this module: javadoc reads src/main/java directly. -->
+        <delombok.skip>true</delombok.skip>
+        <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
+        <junit.version>5.14.4</junit.version>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-unsafe-operations-impl-all</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-testkit</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>toolchain</goal>
+                        </goals>
+                        <configuration>
+                            <toolchains>
+                                <jdk>
+                                    <version>11</version>
+                                </jdk>
+                            </toolchains>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <!-- needed to have access to jdk.internal.misc.Unsafe class -->
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <configuration>
+                    <!-- javadoc has to resolve the same JDK internals the compiler is given above. -->
+                    <additionalOptions>
+                        <additionalOption>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</additionalOption>
+                    </additionalOptions>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

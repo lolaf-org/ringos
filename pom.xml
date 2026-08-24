@@ -1,0 +1,562 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2024-2026 Lolaf.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.lolaf.ringos</groupId>
+    <artifactId>ringos-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>Ringos</name>
+    <description>
+        Lock-free MPMC/SPSC ring buffers, idling strategies and a hashed wheel timer for low-latency Java.
+    </description>
+    <url>https://github.com/lolaf-org/ringos</url>
+    <inceptionYear>2024-2026</inceptionYear>
+    <organization>
+        <name>Lolaf</name>
+        <url>https://www.lolaf.org</url>
+    </organization>
+
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>cmunger</id>
+            <name>Cedric Munger</name>
+            <url>https://github.com/cmunger</url>
+            <organization>Lolaf.org</organization>
+            <organizationUrl>https://www.lolaf.org</organizationUrl>
+        </developer>
+    </developers>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Reproducible builds: with this set, maven-jar-plugin stamps every entry with this instant
+             instead of the build clock and writes them in a fixed order, so the same source produces
+             a byte-identical jar. What that buys at publish time is a bundle anyone can rebuild and
+             compare against Central. It is a per-release constant and F1 has to move it with the
+             version - left behind, a 0.2.0 jar would claim the date of 0.1.0. Build-Jdk-Spec still
+             varies by machine, so releasing from CI on a pinned JDK is the other half. -->
+        <project.build.outputTimestamp>2026-08-24T00:00:00Z</project.build.outputTimestamp>
+        <!-- source/target is the fallback, not the default anyone should want: it compiles against the
+             BUILD JDK's API, so a call to a post-11 method compiles clean at target 11 and then throws
+             NoSuchMethodError on a real JDK 11. Every module that can sets maven.compiler.release=11
+             instead, which compiles against the real JDK 11 API.
+
+             Six modules cannot. javac refuses to export a java.base internal package under release, so
+             the modules that need jdk.internal.misc or jdk.internal.vm.annotation are stuck here; three
+             of them pin a toolchain, which gives the same protection by compiling on the real JDK. The
+             property is left set rather than blanked because maven-javadoc-plugin reads it too and an
+             empty value makes it emit a bare release flag that swallows the next argument. -->
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+
+        <slf4j.version>2.0.17</slf4j.version>
+        <jmh.version>1.37</jmh.version>
+        <mockito.version>5.23.0</mockito.version>
+        <junit.version>6.1.3</junit.version>
+        <lombok.version>1.18.46</lombok.version>
+        <assertj-core.version>3.27.7</assertj-core.version>
+        <awaitility.version>4.3.0</awaitility.version>
+        <jna.version>5.19.1</jna.version>
+
+        <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-resources-plugin.version>3.4.0</maven-resources-plugin.version>
+        <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-dependency-plugin.version>3.7.0</maven-dependency-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-toolchains-plugin.version>3.0.0</maven-toolchains-plugin.version>
+        <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
+        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
+        <license-maven-plugin.version>5.0.0</license-maven-plugin.version>
+        <versions-maven-plugin.version>2.19.1</versions-maven-plugin.version>
+
+        <surefire.argLine>
+            ${surefire.argLine.contended}
+            ${surefire.argLine.nativeAccess}
+            ${surefire.argLine.jdkInternalMisc}
+            --add-opens java.base/java.lang=ALL-UNNAMED
+            --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+            --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+            --add-opens java.base/java.nio=ALL-UNNAMED
+            -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+            -Xshare:off
+            ${surefire.argLine.extra}
+        </surefire.argLine>
+
+        <!-- What puts AbstractRingBuffer's head and tail on separate cache lines. The class measures the
+             layout rather than the flags and logs an error when they are missing, so a fork without these
+             is testing a differently laid out object than the one that ships. -->
+        <surefire.argLine.contended>-XX:ContendedPaddingWidth=64 -XX:-RestrictContended</surefire.argLine.contended>
+
+        <!-- Rejected outright by JDK 11 ("Unrecognized option"), so the modules that run their tests through
+             the JDK 11 toolchain blank this one. -->
+        <surefire.argLine.nativeAccess>--enable-native-access=ALL-UNNAMED</surefire.argLine.nativeAccess>
+
+        <!-- What makes the Unsafe-based ring buffer builders eligible at all. lib-impl-all blanks it for the
+             execution whose whole point is that the MethodHandle fallback is selected without it. -->
+        <surefire.argLine.jdkInternalMisc>--add-opens java.base/jdk.internal.misc=ALL-UNNAMED
+        </surefire.argLine.jdkInternalMisc>
+
+        <!-- Anything a single module needs on top of the shared set. -->
+        <surefire.argLine.extra/>
+
+        <automatic.module.name>org.lolaf.ringos.MODULE.NAME.NOT.SET</automatic.module.name>
+
+        <!-- Where LICENSE.txt is, seen from a module: one level up from every module but the two nested
+             under unsafe-operations-impl-25, which override this. Deliberately relative to the module
+             rather than to a reactor root - maven.multiModuleProjectDirectory would be the staffix root
+             while ringos still lives in the monorepo and the ringos root afterwards, and the licence a
+             jar carries should not depend on where the build was started. A module that gets this wrong
+             fails silently, copying nothing, so C10 checks every jar for the file. -->
+        <license.source.dir>${project.basedir}/..</license.source.dir>
+
+        <!-- What javadoc reads. By default only the delomboked copy of src/main/java. Modules with no Lombok in
+             src/main/java set delombok.skip to true and point javadoc.delomboked.sources back at the originals;
+             that skips a pass that would only copy the files, and keeps delombok from reporting on JDK
+             internals it cannot resolve. -->
+        <delombok.skip>false</delombok.skip>
+        <javadoc.delomboked.sources>${project.build.directory}/delombok</javadoc.delomboked.sources>
+        <javadoc.sourcepath>${javadoc.delomboked.sources}</javadoc.sourcepath>
+    </properties>
+
+    <modules>
+        <module>unsafe-operations-api</module>
+        <module>unsafe-operations-impl-15-24</module>
+        <module>unsafe-operations-impl-11-14</module>
+        <module>unsafe-operations-impl-25</module>
+        <module>unsafe-operations-impl-all</module>
+        <module>clib</module>
+        <module>lib-api</module>
+        <module>lib-impl-testkit</module>
+        <module>lib-impl-unsafe</module>
+        <module>lib-impl-unsafe-11</module>
+        <module>lib-impl-method-handle</module>
+        <module>lib-impl-all</module>
+        <module>timer</module>
+        <module>benchmarks</module>
+    </modules>
+
+    <!-- Maven appends the child's artifactId to an inherited url and scm, so without these every
+         published pom would name https://github.com/lolaf-org/ringos/ringos-lib-api and an scm
+         connection to match. Central does not check that either resolves, so it would publish the
+         dead links and they would be permanent. Needs Maven 3.6.1+. -->
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <connection>scm:git:https://github.com/lolaf-org/ringos.git</connection>
+        <developerConnection>scm:git:git@github.com:lolaf-org/ringos.git</developerConnection>
+        <url>https://github.com/lolaf-org/ringos</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/lolaf-org/ringos/issues</url>
+    </issueManagement>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Align every transitive org.junit.* artifact to a single JUnit version.-->
+            <!-- Declared by the four modules that actually log, rather than inherited by all
+                 seventeen: the published pom is the dependency contract, and seven jars used to
+                 declare slf4j-api without containing a single reference to it. -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj-core.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                            <path>
+                                <groupId>org.openjdk.jmh</groupId>
+                                <artifactId>jmh-generator-annprocess</artifactId>
+                                <version>${jmh.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-toolchains-plugin</artifactId>
+                    <version>${maven-toolchains-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>default-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <archive>
+                                    <manifest>
+                                        <!-- Implementation-Title/Version/Vendor and their Specification
+                                             counterparts, filled from the pom's name, version and
+                                             organization. Informational, but it is what a tool reading a
+                                             jar off a classpath has to go on when the pom is not there. -->
+                                        <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                                        <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                                    </manifest>
+                                    <manifestEntries>
+                                        <Built-By>Lolaf</Built-By>
+                                        <Implementation-URL>https://github.com/lolaf-org/ringos</Implementation-URL>
+                                        <!-- What a consumer writes `requires` against. Five of these
+                                             jars cannot derive one from their filename at all: the
+                                             version-stripping heuristic leaves a component starting
+                                             with a digit (…unsafe.11, …impl.25.provider), which is not
+                                             a valid identifier, so the jar is unusable as a module.
+                                             The sentinel default makes a module that forgets to set
+                                             this fail ModulePathResolutionTest rather than ship a
+                                             filename-derived name that a rename would silently
+                                             change. -->
+                                        <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
+                                    </manifestEntries>
+                                </archive>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <!-- Javadoc reads source, not bytecode, so every Lombok-generated accessor is
+                         invisible to it: a {@link Foo#getBar()} pointing at an @Getter would be
+                         reported as a broken reference, and the published javadoc would show these
+                         classes with no accessors at all. Delombok expands the annotations into real
+                         source that javadoc (only) is then pointed at. -->
+                    <groupId>org.projectlombok</groupId>
+                    <artifactId>lombok-maven-plugin</artifactId>
+                    <version>${lombok-maven-plugin.version}</version>
+                    <dependencies>
+                        <!-- The plugin pins a 2021-era lombok that cannot parse modern sources. -->
+                        <dependency>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </dependency>
+                    </dependencies>
+                    <configuration>
+                        <skip>${delombok.skip}</skip>
+                        <addOutputDirectory>false</addOutputDirectory>
+                        <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                        <outputDirectory>${javadoc.delomboked.sources}</outputDirectory>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                    <configuration>
+                        <!-- doclint's `reference` group is the point of running this in the build: it
+                             resolves every {@link}, {@linkplain}, @see and @throws target against the
+                             compiled symbol table and errors on the ones that do not exist, so a javadoc
+                             link cannot silently rot. `html`, `syntax` and `accessibility` come along for
+                             free; `missing` is off because undocumented members are not a build breaker. -->
+                        <doclint>all,-missing</doclint>
+                        <!-- doclint raises the reference/html/syntax groups as errors, so failing on
+                             errors alone is enough to break the build on a bad link. failOnWarnings
+                             stays off on purpose: it also fires on javac-level noise that has
+                             nothing to do with the documentation, such as annotation enum constants
+                             that are absent from javadoc's classpath. -->
+                        <failOnError>true</failOnError>
+                        <!-- Keep the check hermetic: detectJavaApiLink makes javadoc fetch the JDK API
+                             element-list over the network, and a machine that is offline or behind a proxy
+                             would then fail the build on a warning that has nothing to do with our code.
+                             Reference checking does not need it - it works off the classpath. -->
+                        <detectJavaApiLink>false</detectJavaApiLink>
+                        <!-- No site is built, so there is nothing to cross-link between modules. -->
+                        <detectOfflineLinks>false</detectOfflineLinks>
+                        <quiet>true</quiet>
+                        <!-- Read the delomboked copy of src/main/java rather than the originals. -->
+                        <sourcepath>${javadoc.sourcepath}</sourcepath>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                    <configuration>
+                        <argLine>${surefire.argLine}</argLine>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>delombok-for-javadoc</id>
+                        <!-- After compile, so the module's own generated sources are already compiled and on
+                             the classpath delombok resolves against. -->
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>delombok</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${license-maven-plugin.version}</version>
+                <inherited>false</inherited>
+                <configuration>
+                    <licenseSets>
+                        <licenseSet>
+                            <header>${project.basedir}/HEADER.txt</header>
+                            <excludes>
+                                <exclude>**/LICENSE.txt</exclude>
+                                <exclude>**/*.txt</exclude>
+                                <exclude>**/*.yaml</exclude>
+                                <exclude>**/*.yml</exclude>
+                                <exclude>**/*.sh</exclude>
+                                <exclude>**/mvnw</exclude>
+                                <exclude>**/.mvn/**</exclude>
+                                <exclude>**/pom.xml</exclude>
+                                <exclude>**/src/main/resources/**</exclude>
+                                <exclude>**/src/test/resources/**</exclude>
+                            </excludes>
+                        </licenseSet>
+                    </licenseSets>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>check-license-headers</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- Publishing needs a javadoc jar, and building one runs doclint on the way, so this
+                             single execution both produces the artifact and fails the build on a reference that
+                             does not resolve. Declared here rather than only in pluginManagement: an execution
+                             left there fires solely in the modules that happen to declare the plugin
+                             themselves, which silently left most of ringos undocumented and unchecked. -->
+                        <id>javadoc-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- Central rejects a bundle with no -sources.jar. jar-no-fork rather than jar:
+                             the `jar` goal forks a second `generate-sources` lifecycle, which here would
+                             re-run every code-generating step of the build for no gain. Declared in
+                             <plugins> so all seventeen modules inherit it; the two pom-packaging ones
+                             produce nothing, since the goal skips pom projects. What gets packaged is
+                             src/main/java as written - delombok's output is not a source root
+                             (addOutputDirectory=false), so the Lombok annotations ship as authored. -->
+                        <id>source-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- Ship the licence inside the jar at META-INF/LICENSE.txt. The pom already
+                             declares it, which is what Central checks, but corporate scanners and
+                             `unzip -p` users look in the jar itself. -->
+                        <id>copy-license-into-the-jar</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${license.source.dir}</directory>
+                                    <includes>
+                                        <include>LICENSE.txt</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-build-environment</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Each message is one line on purpose: enforcer prints it verbatim, so a
+                                 wrapped and indented one arrives on the console wrapped and indented. -->
+                            <rules>
+                                <!-- The published poms suppress url and scm path inheritance with the
+                                     child.*.inherit.append.path attributes, which 3.6.0 and older ignore
+                                     silently - they would publish a dead link per module. 3.6.3 is also
+                                     what maven-enforcer-plugin itself requires. -->
+                                <requireMavenVersion>
+                                    <version>[3.6.3,)</version>
+                                    <message>Maven 3.6.3 or newer is required: older versions ignore the child.*.inherit.append.path attributes the published poms rely on.</message>
+                                </requireMavenVersion>
+                                <!-- Ringos runs on JDK 11; building it does not. JUnit 6 requires 17, and
+                                     the shared surefire argLine passes the enable-native-access flag,
+                                     which 16 and older reject outright ("Unrecognized option"), killing
+                                     every fork.
+                                     The modules that must compile against an older API get it from a
+                                     toolchain, not from the JDK running Maven. -->
+                                <requireJavaVersion>
+                                    <version>[17,)</version>
+                                    <message>Building ringos needs JDK 17 or newer (JUnit 6 requires 17, and --enable-native-access is rejected by 16 and older). The library itself still runs on JDK 11.</message>
+                                </requireJavaVersion>
+                                <!-- Central rejects a bundle that depends on a SNAPSHOT, and a release
+                                     that resolved one would stop building the moment that snapshot moved.
+                                     onlyWhenRelease keeps it inert while the version is a SNAPSHOT
+                                     itself, so the siblings' 1.0.0-SNAPSHOT dependencies are fine until
+                                     F1 sets a release version - which is exactly when this has to fire. -->
+                                <requireReleaseDeps>
+                                    <onlyWhenRelease>true</onlyWhenRelease>
+                                    <message>A release may not depend on a SNAPSHOT: Central rejects the bundle, and the artifact would be unbuildable once that snapshot moved.</message>
+                                </requireReleaseDeps>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>${versions-maven-plugin.version}</version>
+                <configuration>
+                    <allowMajorUpdates>false</allowMajorUpdates>
+                    <dependencyExcludes>org.slf4j:*</dependencyExcludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

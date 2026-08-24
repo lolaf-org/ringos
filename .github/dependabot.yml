@@ -1,0 +1,16 @@
+# Watches only the GitHub Actions pinned in .github/workflows. The Maven side is handled by
+# show-versions-updates.sh and update-versions.sh, run deliberately rather than as a stream of pull
+# requests - and their policy (no major upgrades, slf4j held back) lives in versions-maven-plugin's
+# configuration in the root pom, which is where it belongs.
+#
+# The actions are the half nothing else watches: a stale setup-java is how the JDK 11 and 25
+# toolchains quietly stop resolving after a runner image change.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

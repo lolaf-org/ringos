@@ -1,5 +1,8 @@
 # Ringos
 
+[![build](https://github.com/lolaf-org/ringos/actions/workflows/build.yml/badge.svg)](https://github.com/lolaf-org/ringos/actions/workflows/build.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.txt)
+
 Lock-free ring buffers, idling strategies and a hashed wheel timer for Java that must not allocate or block on its
 hot path.
 
@@ -203,10 +206,14 @@ of its surefire executions.
 ./mvnw -T1C clean install
 ```
 
+Building needs **JDK 17 or newer**, though the library runs on 11: the test stack requires 17, and the shared
+surefire arguments use a flag that JDK 16 and older reject. The build says so rather than failing obscurely.
+
 Three modules compile against JDK internals that moved between releases, so they build through a Maven toolchain
 rather than the JDK running the build: `ringos-unsafe-operations-impl-11-14` and `lib-impl-unsafe-11` ask for JDK 11,
 `unsafe-operations-impl-25` asks for JDK 25. Your `~/.m2/toolchains.xml` needs entries for both, plus whichever JDK
-you build with; CI installs 11, 21 and 25 and builds on 21.
+you build with; CI installs 11, 21 and 25 and builds on 21. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+`toolchains.xml` to copy, and what else the build checks besides the tests.
 
 To run the JMH benchmarks:
 
@@ -214,6 +221,12 @@ To run the JMH benchmarks:
 ./mvnw clean install -pl benchmarks -am
 java -jar benchmarks/target/benchmarks.jar
 ```
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build it and
+what the build holds you to, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). A security problem goes
+through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
 

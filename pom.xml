@@ -99,6 +99,7 @@
         <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
         <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
         <license-maven-plugin.version>5.0.0</license-maven-plugin.version>
         <versions-maven-plugin.version>2.19.1</versions-maven-plugin.version>
@@ -602,6 +603,34 @@
                                 <arg>--pinentry-mode</arg>
                                 <arg>loopback</arg>
                             </gpgArguments>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <!-- An extension, not just a plugin: this is what replaces the default deploy
+                             with a Portal upload, so `mvn -Prelease deploy` bundles the reactor and
+                             sends it to central.sonatype.com instead of to a repository that does not
+                             exist. -->
+                        <extensions>true</extensions>
+                        <configuration>
+                            <!-- The <server> id in settings.xml holding the Portal token. -->
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Upload and validate, then stop and wait for a human to press publish
+                                 in the Portal. A published version can never be replaced or reused,
+                                 so the last step stays manual until there is a reason to trust it. -->
+                            <autoPublish>false</autoPublish>
+                            <!-- Do not return until Central has validated the bundle, so a rejection
+                                 is a failed build here rather than an email an hour later. -->
+                            <waitUntil>validated</waitUntil>
+                            <!-- maven.deploy.skip is a maven-deploy-plugin property, and this plugin
+                                 replaces that plugin - so the two modules C7 keeps out of the release
+                                 have to be named again, here, in this plugin's own terms. -->
+                            <excludeArtifacts>
+                                <excludeArtifact>ringos-benchmarks</excludeArtifact>
+                                <excludeArtifact>ringos-lib-impl-testkit</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                 </plugins>

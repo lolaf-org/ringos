@@ -1,0 +1,84 @@
+name: release
+
+# Manual only. A release is a decision, not a consequence of pushing something: the version to cut is
+# typed in here, and nothing about a tag or a branch can trigger it by accident.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without a leading v (e.g. 0.1.0)'
+        required: true
+        type: string
+
+# Two releases running at once would race each other into the Portal with the same coordinates.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same three JDKs as the build workflow, and for the same reason: listing them here is what
+      # writes the ~/.m2/toolchains.xml that lib-impl-unsafe-11, unsafe-operations-impl-11-14 and
+      # unsafe-operations-impl-25 resolve against. A release built without them is a release built
+      # against the wrong API.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: |
+            11
+            21
+            25
+
+      # The JDK Maven itself runs on, and the step that writes settings.xml and imports the signing
+      # key. server-username/server-password are the NAMES of environment variables the generated
+      # settings.xml refers to, not values - the secrets themselves are set on the mvn step below.
+      #
+      # gpg-passphrase is deliberately NOT passed: it would put the passphrase into settings.xml,
+      # which maven-gpg-plugin refuses under bestPractices=true. The plugin reads
+      # MAVEN_GPG_PASSPHRASE from the environment instead.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 21
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_TOKEN_USERNAME
+          server-password: CENTRAL_TOKEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      # What arrived is the signing subkey and a stub of the primary, so this proves the runner can
+      # sign and nothing more. Fingerprints only - never the key.
+      - name: Show what was imported
+        run: gpg --list-secret-keys --keyid-format=long --with-subkey-fingerprints
+
+      # In the working tree only, never committed: the tag is what records the version in history,
+      # and it is made by hand.
+      - name: Set the version
+        run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
+
+      # -Prelease adds the signing and the Portal upload. autoPublish is false, so this ends with the
+      # deployment validated and waiting in the Portal for someone to press publish or drop it.
+      - name: Build, sign and upload to the Portal
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn -B -T1C -Prelease deploy
+
+      - name: Upload surefire reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/**'
+          retention-days: 7
+          if-no-files-found: ignore

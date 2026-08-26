@@ -225,8 +225,8 @@ java -jar benchmarks/target/benchmarks.jar
 ## Contributing
 
 Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build it and
-what the build holds you to, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). A security problem goes
-through [SECURITY.md](SECURITY.md), never a public issue.
+what the build holds you to. A security problem goes through [SECURITY.md](SECURITY.md), never a
+public issue.
 
 ## License
 

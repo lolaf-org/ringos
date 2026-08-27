@@ -64,7 +64,7 @@ jobs:
       #
       # release:perform re-clones into target/checkout and forks a fresh Maven, but ~/.m2 is shared, so the
       # toolchains reach that build too.
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: |
@@ -79,7 +79,7 @@ jobs:
       # gpg-passphrase is deliberately NOT passed: it would put the passphrase into settings.xml, which
       # maven-gpg-plugin refuses under bestPractices=true. The plugin reads MAVEN_GPG_PASSPHRASE from the
       # environment instead.
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21

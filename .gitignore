@@ -2,6 +2,16 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 
+### maven-release-plugin ###
+# Written into the repository root and beside every pom while a release is being cut, and normally
+# cleaned up afterwards. Never commit release.properties: release:prepare defaults to resume=true, so a
+# committed one would make the next release resume somebody else's half-finished attempt - with their
+# preparationGoals, which is how a release could quietly skip its own test gate.
+release.properties
+pom.xml.releaseBackup
+pom.xml.tag
+pom.xml.next
+
 ### IntelliJ IDEA ###
 .idea
 *.iws

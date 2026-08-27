@@ -109,6 +109,10 @@
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <maven-release-plugin.version>3.3.1</maven-release-plugin.version>
+        <!-- Appended to what maven-release-plugin passes to its forked builds; see <arguments> on the
+             plugin below for why this indirection is needed at all. Empty here on purpose - the release
+             workflow sets it for release:perform alone, to skip the second run of the test suite. -->
+        <release.extraArguments/>
         <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
         <license-maven-plugin.version>5.1.2</license-maven-plugin.version>
         <versions-maven-plugin.version>2.21.0</versions-maven-plugin.version>
@@ -431,8 +435,16 @@
                         <useReleaseProfile>false</useReleaseProfile>
                         <!-- Passed to both forked builds - prepare's verify and perform's deploy. The
                              reactor is built with -T1C everywhere else and the release is not the place to
-                             start diverging. -->
-                        <arguments>-T1C</arguments>
+                             start diverging.
+
+                             The ${release.extraArguments} tail exists because setting <arguments> here at
+                             all makes the conventional -Darguments= on the command line a no-op: POM
+                             configuration beats the parameter's ${arguments} default, so the flag is
+                             accepted and silently ignored. Verified rather than assumed - a dry run passed
+                             -Darguments="-T1C -DskipTests" and the fork logged "with additional arguments:
+                             -T1C". The property is the supported seam instead: empty by default, and set on
+                             one invocation when that invocation needs something extra. -->
+                        <arguments>-T1C ${release.extraArguments}</arguments>
                         <!-- The defaults are "[maven-release-plugin] prepare release v0.1.0" and
                              "[maven-release-plugin] prepare for next development iteration". This
                              repository's messages are short and say what happened. -->

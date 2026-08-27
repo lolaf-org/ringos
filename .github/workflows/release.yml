@@ -161,7 +161,7 @@ jobs:
       #
       # The probe signature is made and verified, so a broken key, a wrong passphrase or a
       # misconfigured agent all fail here rather than mid-deploy.
-      - name: Prove the runner can sign
+      - name: Configure the gpg agent and prove signing works
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
@@ -230,6 +230,17 @@ jobs:
       # central-publishing-maven-plugin bundles and uploads it. The secrets below reach that forked
       # Maven because it inherits this step's environment.
       #
+      # The tests do not run again here. prepare has just run the whole suite - 2272 tests - against the
+      # very source this deploys, since the tag is the commit prepare made from the tree it verified, and
+      # the build is reproducible, so a second run cannot change what is published. It can only fail, and
+      # it would fail at the worst moment: the tag and both commits are pushed by then, which is the
+      # half-done state performOnly exists to dig out of. The gate belongs in prepare, before anything is
+      # irreversible. -DskipTests rather than -Dmaven.test.skip: test sources still compile, which is a
+      # real check and nearly free.
+      #
+      # It goes through release.extraArguments rather than -Darguments= because the pom sets <arguments>,
+      # which makes -Darguments= on the command line a silently ignored no-op. The pom explains it.
+      #
       # autoPublish is false, so this ends with the deployment validated and waiting in the Portal for
       # someone to press publish or drop it.
       #
@@ -259,7 +270,7 @@ jobs:
             echo "--- release.properties ---"
             cat release.properties
           fi
-          mvn -B release:perform
+          mvn -B release:perform -Drelease.extraArguments=-DskipTests
 
       # Created only once the deployment has validated in the Portal, so a GitHub Release can never
       # announce artifacts that failed to publish. The body is the CHANGELOG.md section extracted at

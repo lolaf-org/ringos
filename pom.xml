@@ -140,8 +140,7 @@
 
         <!-- What makes the Unsafe-based ring buffer builders eligible at all. lib-impl-all blanks it for the
              execution whose whole point is that the MethodHandle fallback is selected without it. -->
-        <surefire.argLine.jdkInternalMisc>--add-opens java.base/jdk.internal.misc=ALL-UNNAMED
-        </surefire.argLine.jdkInternalMisc>
+        <surefire.argLine.jdkInternalMisc>--add-opens java.base/jdk.internal.misc=ALL-UNNAMED</surefire.argLine.jdkInternalMisc>
 
         <!-- Anything a single module needs on top of the shared set. -->
         <surefire.argLine.extra/>

@@ -109,9 +109,6 @@
                         </goals>
                         <configuration>
                             <finalName>benchmarks</finalName>
-                            <!-- Nothing depends on this module, so the rewritten pom shade drops in the
-                                 module directory has no consumer - only an untracked file to trip over.
-                                 3.2.1 did not write one; 3.6.2 does unless told otherwise. -->
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

@@ -1,21 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-
-    Copyright © 2024-2026 Lolaf.org
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
--->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
@@ -42,10 +25,6 @@
         <delombok.skip>true</delombok.skip>
         <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
         <maven.javadoc.skip>true</maven.javadoc.skip>
-        <!-- D5: the contract tests have no audience outside this repo, and every implementation of
-             them is in it. Not deploying is also what keeps the module exempt from Central's
-             sources/javadoc requirement, which it could only meet with a placeholder. Publishing it
-             later is not a breaking change, so an external implementer is reason enough to revisit. -->
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
@@ -60,8 +39,6 @@
 
     <build>
         <plugins>
-            <!-- The abstract tests are the artifact: publish them as a test-jar for the implementation
-                 modules to subclass. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -72,9 +49,6 @@
                         </goals>
                         <configuration>
                             <archive>
-                                <!-- The parent sets this on the default-jar execution, which the
-                                     test-jar goal is not; without it the module would be named after
-                                     the file. -->
                                 <manifestEntries>
                                     <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
                                 </manifestEntries>
@@ -85,5 +59,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

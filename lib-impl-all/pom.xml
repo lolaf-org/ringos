@@ -1,21 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-
-    Copyright © 2024-2026 Lolaf.org
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
--->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
@@ -51,7 +34,6 @@
             <artifactId>slf4j-api</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Runtime-only: the concrete builders, selected reflectively by RingBufferFactory. -->
         <dependency>
             <groupId>org.lolaf.ringos</groupId>
             <artifactId>ringos-lib-impl-unsafe</artifactId>
@@ -70,15 +52,12 @@
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- The Unsafe builders delegate to UnsafeOperationsApi at runtime; bundle its implementations too. -->
         <dependency>
             <groupId>org.lolaf.ringos</groupId>
             <artifactId>ringos-unsafe-operations-impl-all</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
-
-        <!-- Test-only: the SPI/API types the integration test compiles against. -->
         <dependency>
             <groupId>org.lolaf.ringos</groupId>
             <artifactId>ringos-lib-api</artifactId>
@@ -98,13 +77,7 @@
         <plugins>
             <!-- Central requires a -sources.jar and a -javadoc.jar beside every artifact whose
                  packaging is not `pom`, and this module has no src/main/java for either plugin to
-                 build one from. `pom` packaging would lift the requirement, but it would also make
-                 every consumer write <type>pom</type> on a dependency whose whole point is being the
-                 one artifact you name — and this module's tests would have no lifecycle to run in.
-                 So Central's other allowance applies: a placeholder jar. Both hold src/placeholder,
-                 which says what the artifact is and where its sources actually live.
-                 Declared here rather than in the parent's pluginManagement, where an added execution
-                 would also fire in lib-impl-testkit, the one other module declaring this plugin. -->
+                 build one from. `pom` packaging would lift the requirement. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -166,15 +139,9 @@
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
-                    <!-- Without the jdk.internal.misc add-opens: the MethodHandle builder must be selected.
-                         The shared argLine carries it, so the module blanks that one piece above rather than
-                         writing an argLine of its own and losing the @Contended flags with it. -->
                     <execution>
                         <id>default-test</id>
                     </execution>
-                    <!-- With the jdk.internal.misc add-opens present: an Unsafe builder must be selected. The
-                         shared set plus the opens the Unsafe path needs, which is why this one execution does
-                         name an argLine - it is adding to ${surefire.argLine}, not replacing it. -->
                     <execution>
                         <id>test-with-jdk-internal-misc-open</id>
                         <phase>test</phase>

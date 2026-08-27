@@ -20,9 +20,8 @@
     <properties>
         <automatic.module.name>org.lolaf.ringos.unsafe.j15</automatic.module.name>
         <!-- The SharedSecrets opens this implementation reaches through, on top of the shared set. -->
-        <surefire.argLine.extra>--add-opens java.base/jdk.internal.access=ALL-UNNAMED --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
-
-        <!-- No Lombok in this module: javadoc reads src/main/java directly. -->
+        <surefire.argLine.extra>--add-opens java.base/jdk.internal.access=ALL-UNNAMED
+            --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
         <delombok.skip>true</delombok.skip>
         <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
     </properties>
@@ -56,7 +55,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
-                    <!-- javadoc has to resolve the same JDK internals the compiler is given above. -->
                     <additionalOptions>
                         <additionalOption>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</additionalOption>
                         <additionalOption>--add-exports java.base/jdk.internal.access=ALL-UNNAMED</additionalOption>

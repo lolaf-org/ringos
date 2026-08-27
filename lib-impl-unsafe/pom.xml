@@ -19,7 +19,6 @@
 
     <properties>
         <automatic.module.name>org.lolaf.ringos.rb.unsafe</automatic.module.name>
-        <!-- No Lombok in this module: javadoc reads src/main/java directly. -->
         <delombok.skip>true</delombok.skip>
         <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
     </properties>
@@ -57,7 +56,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <compilerArgs>
-                        <!-- needed to have access to jdk.internal.misc.Unsafe class -->
                         <arg>--add-exports</arg>
                         <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
                     </compilerArgs>
@@ -67,7 +65,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
-                    <!-- javadoc has to resolve the same JDK internals the compiler is given above. -->
                     <additionalOptions>
                         <additionalOption>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</additionalOption>
                     </additionalOptions>

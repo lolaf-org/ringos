@@ -24,10 +24,7 @@
              shared argLine, the @Contended flags above all, instead of replacing the whole of it to drop
              a single argument. -->
         <surefire.argLine.nativeAccess />
-        <!-- jdk.internal.ref is the one open this module needs that the shared set does not carry. -->
         <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED</surefire.argLine.extra>
-
-        <!-- No Lombok in this module: javadoc reads src/main/java directly. -->
         <delombok.skip>true</delombok.skip>
         <javadoc.delomboked.sources>${project.basedir}/src/main/java</javadoc.delomboked.sources>
         <junit.version>5.14.4</junit.version>
@@ -86,7 +83,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <compilerArgs>
-                        <!-- needed to have access to jdk.internal.misc.Unsafe class -->
                         <arg>--add-exports</arg>
                         <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
                     </compilerArgs>
@@ -96,7 +92,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
-                    <!-- javadoc has to resolve the same JDK internals the compiler is given above. -->
                     <additionalOptions>
                         <additionalOption>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</additionalOption>
                     </additionalOptions>

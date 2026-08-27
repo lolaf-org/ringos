@@ -1,21 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-
-    Copyright © 2024-2026 Lolaf.org
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
--->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
@@ -55,35 +38,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!-- Reproducible builds: with this set, maven-jar-plugin stamps every entry with this instant
-             instead of the build clock and writes them in a fixed order, so the same source produces
-             a byte-identical jar. What that buys at publish time is a bundle anyone can rebuild and
-             compare against Central. Build-Jdk-Spec still varies by machine, so releasing from CI on a
-             pinned JDK is the other half.
-
-             It is a per-release constant, and maven-release-plugin moves it: its pom rewrite sets this
-             property to the release build's start time, in this same format and in UTC, in the same
-             commits as the version and for the development poms as well as the tagged ones. So it is
-             not a step anyone performs by hand, and a 0.2.0 jar cannot end up claiming 0.1.0's date.
-
-             Two things that keeps working depend on the value being a literal instant, so leave it as
-             one. The plugin skips the property when it is absent or empty, and a variable reference -
-             ${env.SOMETHING} injected by the release workflow, say - would be worse than useless: the
-             pom is deployed to Central exactly as written here, uninterpolated, so anyone rebuilding
-             the tag would resolve it to their own clock and the reproducibility this buys would be
-             gone. (The plugin would also overwrite the reference with a literal on the first release.) -->
+        <!-- Reproducible builds -->
         <project.build.outputTimestamp>2026-08-27T18:57:35Z</project.build.outputTimestamp>
-        <!-- source/target is the fallback, not the default anyone should want: it compiles against the
-             BUILD JDK's API, so a call to a post-11 method compiles clean at target 11 and then throws
-             NoSuchMethodError on a real JDK 11. Every module that can sets maven.compiler.release=11
-             instead, which compiles against the real JDK 11 API.
-
-             Six modules cannot. javac refuses to export a java.base internal package under release, so
-             the modules that need jdk.internal.misc or jdk.internal.vm.annotation are stuck here; three
-             of them pin a toolchain, which gives the same protection by compiling on the real JDK. The
-             property is left set rather than blanked because maven-javadoc-plugin reads it too and an
-             empty value makes it emit a bare release flag that swallows the next argument. -->
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
@@ -109,13 +65,10 @@
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <maven-release-plugin.version>3.3.1</maven-release-plugin.version>
-        <!-- Appended to what maven-release-plugin passes to its forked builds; see <arguments> on the
-             plugin below for why this indirection is needed at all. Empty here on purpose - the release
-             workflow sets it for release:perform alone, to skip the second run of the test suite. -->
+        <!-- Appended to what maven-release-plugin passes to its forked builds -->
         <release.extraArguments/>
         <lombok-maven-plugin.version>1.18.20.0</lombok-maven-plugin.version>
         <license-maven-plugin.version>5.1.2</license-maven-plugin.version>
-        <versions-maven-plugin.version>2.21.0</versions-maven-plugin.version>
 
         <surefire.argLine>
             ${surefire.argLine.contended}
@@ -129,37 +82,12 @@
             -Xshare:off
             ${surefire.argLine.extra}
         </surefire.argLine>
-
-        <!-- What puts AbstractRingBuffer's head and tail on separate cache lines. The class measures the
-             layout rather than the flags and logs an error when they are missing, so a fork without these
-             is testing a differently laid out object than the one that ships. -->
         <surefire.argLine.contended>-XX:ContendedPaddingWidth=64 -XX:-RestrictContended</surefire.argLine.contended>
-
-        <!-- Rejected outright by JDK 11 ("Unrecognized option"), so the modules that run their tests through
-             the JDK 11 toolchain blank this one. -->
         <surefire.argLine.nativeAccess>--enable-native-access=ALL-UNNAMED</surefire.argLine.nativeAccess>
-
-        <!-- What makes the Unsafe-based ring buffer builders eligible at all. lib-impl-all blanks it for the
-             execution whose whole point is that the MethodHandle fallback is selected without it. -->
         <surefire.argLine.jdkInternalMisc>--add-opens java.base/jdk.internal.misc=ALL-UNNAMED</surefire.argLine.jdkInternalMisc>
-
-        <!-- Anything a single module needs on top of the shared set. -->
         <surefire.argLine.extra />
-
         <automatic.module.name>org.lolaf.ringos.MODULE.NAME.NOT.SET</automatic.module.name>
-
-        <!-- Where LICENSE.txt is, seen from a module: one level up from every module but the two nested
-             under unsafe-operations-impl-25, which override this. Deliberately relative to the module
-             rather than to a reactor root - maven.multiModuleProjectDirectory would be the staffix root
-             while ringos still lives in the monorepo and the ringos root afterwards, and the licence a
-             jar carries should not depend on where the build was started. A module that gets this wrong
-             fails silently, copying nothing, so C10 checks every jar for the file. -->
         <license.source.dir>${project.basedir}/..</license.source.dir>
-
-        <!-- What javadoc reads. By default only the delomboked copy of src/main/java. Modules with no Lombok in
-             src/main/java set delombok.skip to true and point javadoc.delomboked.sources back at the originals;
-             that skips a pass that would only copy the files, and keeps delombok from reporting on JDK
-             internals it cannot resolve. -->
         <delombok.skip>false</delombok.skip>
         <javadoc.delomboked.sources>${project.build.directory}/delombok</javadoc.delomboked.sources>
         <javadoc.sourcepath>${javadoc.delomboked.sources}</javadoc.sourcepath>
@@ -182,15 +110,10 @@
         <module>benchmarks</module>
     </modules>
 
-    <!-- Maven appends the child's artifactId to an inherited url and scm, so without these every
-         published pom would name https://github.com/lolaf-org/ringos/ringos-lib-api and an scm
-         connection to match. Central does not check that either resolves, so it would publish the
-         dead links and they would be permanent. Needs Maven 3.6.1+. -->
-    <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
         <connection>scm:git:https://github.com/lolaf-org/ringos.git</connection>
-        <!-- HTTPS rather than the conventional ssh: the release is cut by maven-release-plugin from
-             CI, whose credential is a token, and a token is an HTTPS credential. connection and url
-             above are what consumers read; this one is only ever used by whatever pushes. -->
         <developerConnection>scm:git:https://github.com/lolaf-org/ringos.git</developerConnection>
         <url>https://github.com/lolaf-org/ringos</url>
         <tag>HEAD</tag>
@@ -307,25 +230,12 @@
                             <configuration>
                                 <archive>
                                     <manifest>
-                                        <!-- Implementation-Title/Version/Vendor and their Specification
-                                             counterparts, filled from the pom's name, version and
-                                             organization. Informational, but it is what a tool reading a
-                                             jar off a classpath has to go on when the pom is not there. -->
                                         <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                                         <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
                                     </manifest>
                                     <manifestEntries>
                                         <Built-By>Lolaf</Built-By>
                                         <Implementation-URL>https://github.com/lolaf-org/ringos</Implementation-URL>
-                                        <!-- What a consumer writes `requires` against. Five of these
-                                             jars cannot derive one from their filename at all: the
-                                             version-stripping heuristic leaves a component starting
-                                             with a digit (…unsafe.11, …impl.25.provider), which is not
-                                             a valid identifier, so the jar is unusable as a module.
-                                             The sentinel default makes a module that forgets to set
-                                             this fail ModulePathResolutionTest rather than ship a
-                                             filename-derived name that a rename would silently
-                                             change. -->
                                         <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
                                     </manifestEntries>
                                 </archive>
@@ -339,16 +249,10 @@
                     <version>${maven-source-plugin.version}</version>
                 </plugin>
                 <plugin>
-                    <!-- Javadoc reads source, not bytecode, so every Lombok-generated accessor is
-                         invisible to it: a {@link Foo#getBar()} pointing at an @Getter would be
-                         reported as a broken reference, and the published javadoc would show these
-                         classes with no accessors at all. Delombok expands the annotations into real
-                         source that javadoc (only) is then pointed at. -->
                     <groupId>org.projectlombok</groupId>
                     <artifactId>lombok-maven-plugin</artifactId>
                     <version>${lombok-maven-plugin.version}</version>
                     <dependencies>
-                        <!-- The plugin pins a 2021-era lombok that cannot parse modern sources. -->
                         <dependency>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
@@ -367,27 +271,11 @@
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <version>${maven-javadoc-plugin.version}</version>
                     <configuration>
-                        <!-- doclint's `reference` group is the point of running this in the build: it
-                             resolves every {@link}, {@linkplain}, @see and @throws target against the
-                             compiled symbol table and errors on the ones that do not exist, so a javadoc
-                             link cannot silently rot. `html`, `syntax` and `accessibility` come along for
-                             free; `missing` is off because undocumented members are not a build breaker. -->
                         <doclint>all,-missing</doclint>
-                        <!-- doclint raises the reference/html/syntax groups as errors, so failing on
-                             errors alone is enough to break the build on a bad link. failOnWarnings
-                             stays off on purpose: it also fires on javac-level noise that has
-                             nothing to do with the documentation, such as annotation enum constants
-                             that are absent from javadoc's classpath. -->
                         <failOnError>true</failOnError>
-                        <!-- Keep the check hermetic: detectJavaApiLink makes javadoc fetch the JDK API
-                             element-list over the network, and a machine that is offline or behind a proxy
-                             would then fail the build on a warning that has nothing to do with our code.
-                             Reference checking does not need it - it works off the classpath. -->
                         <detectJavaApiLink>false</detectJavaApiLink>
-                        <!-- No site is built, so there is nothing to cross-link between modules. -->
                         <detectOfflineLinks>false</detectOfflineLinks>
                         <quiet>true</quiet>
-                        <!-- Read the delomboked copy of src/main/java rather than the originals. -->
                         <sourcepath>${javadoc.sourcepath}</sourcepath>
                     </configuration>
                 </plugin>
@@ -399,55 +287,22 @@
                         <argLine>${surefire.argLine}</argLine>
                     </configuration>
                 </plugin>
-                <!-- Cuts the release: sets the version across every module, commits, tags, sets the next
-                     snapshot, commits and pushes, then builds and deploys the tag. It is never bound to a
-                     lifecycle phase and is only ever invoked by name, but configuration declared here still
-                     applies to a command-line invocation, which is why it lives in pluginManagement like
-                     every other pinned plugin.
-
-                     It also updates project.build.outputTimestamp in the same commit as the version, so the
-                     reminder C7 left behind - bump the timestamp or a 0.2.0 jar claims 0.1.0's date - is
-                     the plugin's job rather than the maintainer's. -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-release-plugin</artifactId>
                     <version>${maven-release-plugin.version}</version>
                     <configuration>
-                        <!-- The default is @{project.artifactId}-@{project.version}, which would tag the
-                             repository ringos-parent-0.1.0. The repository is ringos; the tag is the
-                             version. -->
                         <tagNameFormat>v@{project.version}</tagNameFormat>
-                        <!-- All seventeen modules carry the parent's version and always will, so take it
-                             for every one of them rather than prompting seventeen times. -->
                         <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <!-- release:perform runs `deploy` on the freshly checked-out tag, and it is the
-                             release profile that adds the signing (E3) and the Portal upload (E6). Without
-                             this the release would build and deploy nowhere. -->
                         <releaseProfiles>release</releaseProfiles>
                         <!-- release:perform otherwise sets performRelease=true, which activates
                              release-profile from Maven's super-POM - still present in 3.8.7 - and that
                              profile attaches a sources jar and a javadoc jar of its own, under the
                              execution ids attach-sources and attach-javadocs. Ours are source-jar and
-                             javadoc-jar (C5), so the ids do not merge and both would fire: two
-                             -sources.jar and two -javadoc.jar attached per module. C5 and C5b already
-                             produce exactly what Central requires, so this profile has nothing to add
-                             and one duplicate to cause. -->
+                             javadoc-jar, so the ids do not merge and both would fire: two
+                             -sources.jar and two -javadoc.jar attached per module. -->
                         <useReleaseProfile>false</useReleaseProfile>
-                        <!-- Passed to both forked builds - prepare's verify and perform's deploy. The
-                             reactor is built with -T1C everywhere else and the release is not the place to
-                             start diverging.
-
-                             The ${release.extraArguments} tail exists because setting <arguments> here at
-                             all makes the conventional -Darguments= on the command line a no-op: POM
-                             configuration beats the parameter's ${arguments} default, so the flag is
-                             accepted and silently ignored. Verified rather than assumed - a dry run passed
-                             -Darguments="-T1C -DskipTests" and the fork logged "with additional arguments:
-                             -T1C". The property is the supported seam instead: empty by default, and set on
-                             one invocation when that invocation needs something extra. -->
                         <arguments>-T1C ${release.extraArguments}</arguments>
-                        <!-- The defaults are "[maven-release-plugin] prepare release v0.1.0" and
-                             "[maven-release-plugin] prepare for next development iteration". This
-                             repository's messages are short and say what happened. -->
                         <scmReleaseCommitComment>release @{releaseLabel}</scmReleaseCommitComment>
                         <scmDevelopmentCommitComment>resume development after @{releaseLabel}</scmDevelopmentCommitComment>
                     </configuration>
@@ -461,8 +316,6 @@
                 <executions>
                     <execution>
                         <id>delombok-for-javadoc</id>
-                        <!-- After compile, so the module's own generated sources are already compiled and on
-                             the classpath delombok resolves against. -->
                         <phase>process-classes</phase>
                         <goals>
                             <goal>delombok</goal>
@@ -509,11 +362,6 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <executions>
                     <execution>
-                        <!-- Publishing needs a javadoc jar, and building one runs doclint on the way, so this
-                             single execution both produces the artifact and fails the build on a reference that
-                             does not resolve. Declared here rather than only in pluginManagement: an execution
-                             left there fires solely in the modules that happen to declare the plugin
-                             themselves, which silently left most of ringos undocumented and unchecked. -->
                         <id>javadoc-jar</id>
                         <phase>package</phase>
                         <goals>
@@ -527,13 +375,6 @@
                 <artifactId>maven-source-plugin</artifactId>
                 <executions>
                     <execution>
-                        <!-- Central rejects a bundle with no -sources.jar. jar-no-fork rather than jar:
-                             the `jar` goal forks a second `generate-sources` lifecycle, which here would
-                             re-run every code-generating step of the build for no gain. Declared in
-                             <plugins> so all seventeen modules inherit it; the two pom-packaging ones
-                             produce nothing, since the goal skips pom projects. What gets packaged is
-                             src/main/java as written - delombok's output is not a source root
-                             (addOutputDirectory=false), so the Lombok annotations ship as authored. -->
                         <id>source-jar</id>
                         <phase>package</phase>
                         <goals>
@@ -547,9 +388,6 @@
                 <artifactId>maven-resources-plugin</artifactId>
                 <executions>
                     <execution>
-                        <!-- Ship the licence inside the jar at META-INF/LICENSE.txt. The pom already
-                             declares it, which is what Central checks, but corporate scanners and
-                             `unzip -p` users look in the jar itself. -->
                         <id>copy-license-into-the-jar</id>
                         <phase>process-resources</phase>
                         <goals>
@@ -581,32 +419,15 @@
                             <goal>enforce</goal>
                         </goals>
                         <configuration>
-                            <!-- Each message is one line on purpose: enforcer prints it verbatim, so a
-                                 wrapped and indented one arrives on the console wrapped and indented. -->
                             <rules>
-                                <!-- The published poms suppress url and scm path inheritance with the
-                                     child.*.inherit.append.path attributes, which 3.6.0 and older ignore
-                                     silently - they would publish a dead link per module. 3.6.3 is also
-                                     what maven-enforcer-plugin itself requires. -->
                                 <requireMavenVersion>
                                     <version>[3.6.3,)</version>
                                     <message>Maven 3.6.3 or newer is required: older versions ignore the child.*.inherit.append.path attributes the published poms rely on.</message>
                                 </requireMavenVersion>
-                                <!-- Ringos runs on JDK 11; building it does not. JUnit 6 requires 17, and
-                                     the shared surefire argLine passes the enable-native-access flag,
-                                     which 16 and older reject outright ("Unrecognized option"), killing
-                                     every fork.
-                                     The modules that must compile against an older API get it from a
-                                     toolchain, not from the JDK running Maven. -->
                                 <requireJavaVersion>
                                     <version>[17,)</version>
                                     <message>Building ringos needs JDK 17 or newer (JUnit 6 requires 17, and --enable-native-access is rejected by 16 and older). The library itself still runs on JDK 11.</message>
                                 </requireJavaVersion>
-                                <!-- Central rejects a bundle that depends on a SNAPSHOT, and a release
-                                     that resolved one would stop building the moment that snapshot moved.
-                                     onlyWhenRelease keeps it inert while the version is a SNAPSHOT
-                                     itself, so the siblings' 1.0.0-SNAPSHOT dependencies are fine until
-                                     F1 sets a release version - which is exactly when this has to fire. -->
                                 <requireReleaseDeps>
                                     <onlyWhenRelease>true</onlyWhenRelease>
                                     <message>A release may not depend on a SNAPSHOT: Central rejects the bundle, and the artifact would be unbuildable once that snapshot moved.</message>
@@ -616,22 +437,10 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>versions-maven-plugin</artifactId>
-                <version>${versions-maven-plugin.version}</version>
-                <configuration>
-                    <allowMajorUpdates>false</allowMajorUpdates>
-                    <dependencyExcludes>org.slf4j:*</dependencyExcludes>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <!-- Signing lives in a profile because Central is the only thing that needs it: an everyday
-             `mvn install` must not want a private key, and a machine without one must still be able to
-             build the project. `mvn -Prelease install` signs. -->
         <profile>
             <id>release</id>
             <build>
@@ -650,22 +459,9 @@
                             </execution>
                         </executions>
                         <configuration>
-                            <!-- The primary key, not the subkey: gpg resolves it to whichever signing
-                                 subkey is currently valid, so a subkey rotation - the one here expires
-                                 in 2030 - does not mean editing this pom. -->
                             <keyname>37FDB8617EFE2DED</keyname>
-                            <!-- Refuse a passphrase that arrived from settings.xml or the command line.
-                                 The supported route is the MAVEN_GPG_PASSPHRASE environment variable
-                                 (or a primed gpg-agent on a workstation), which keeps it off disk and
-                                 out of shell history. The plugin will enforce this by default in a
-                                 future release; turning it on now means finding out here rather than
-                                 during a release. -->
                             <bestPractices>true</bestPractices>
                             <gpgArguments>
-                                <!-- Without this, gpg wants to ask for the passphrase through a
-                                     pinentry dialog. On a CI runner there is no one to answer it and
-                                     nothing to draw it on, so the signing step hangs until the job
-                                     times out. Loopback makes gpg read what the plugin hands it. -->
                                 <arg>--pinentry-mode</arg>
                                 <arg>loopback</arg>
                             </gpgArguments>
@@ -675,24 +471,15 @@
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
                         <version>${central-publishing-maven-plugin.version}</version>
-                        <!-- An extension, not just a plugin: this is what replaces the default deploy
-                             with a Portal upload, so `mvn -Prelease deploy` bundles the reactor and
-                             sends it to central.sonatype.com instead of to a repository that does not
-                             exist. -->
                         <extensions>true</extensions>
                         <configuration>
                             <!-- The <server> id in settings.xml holding the Portal token. -->
                             <publishingServerId>central</publishingServerId>
-                            <!-- Upload and validate, then stop and wait for a human to press publish
-                                 in the Portal. A published version can never be replaced or reused,
-                                 so the last step stays manual until there is a reason to trust it. -->
+                            <!-- Upload and validate, do not publish automatically -->
                             <autoPublish>false</autoPublish>
-                            <!-- Do not return until Central has validated the bundle, so a rejection
-                                 is a failed build here rather than an email an hour later. -->
                             <waitUntil>validated</waitUntil>
                             <!-- maven.deploy.skip is a maven-deploy-plugin property, and this plugin
-                                 replaces that plugin - so the two modules C7 keeps out of the release
-                                 have to be named again, here, in this plugin's own terms. -->
+                                 replaces that plugin -->
                             <excludeArtifacts>
                                 <excludeArtifact>ringos-benchmarks</excludeArtifact>
                                 <excludeArtifact>ringos-lib-impl-testkit</excludeArtifact>

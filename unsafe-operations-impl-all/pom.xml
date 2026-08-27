@@ -1,21 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-
-    Copyright © 2024-2026 Lolaf.org
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
--->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
@@ -36,14 +19,14 @@
         runtime and loaded reflectively only when they match the running JDK.
     </description>
 
-    <!-- Kept at the parent-default Java 11 release: the provider classes here MUST load on every supported JDK. -->
-
     <properties>
         <maven.compiler.release>11</maven.compiler.release>
         <automatic.module.name>org.lolaf.ringos.unsafe.all</automatic.module.name>
         <!-- Every open any bundled implementation might need, on top of the shared set, so the test works on
              whichever JDK runs it. jdk.internal.misc and sun.nio.ch are already in the shared set. -->
-        <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/jdk.internal.access=ALL-UNNAMED --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
+        <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED
+            --add-opens java.base/jdk.internal.access=ALL-UNNAMED
+            --add-opens java.base/jdk.internal.access.foreign=ALL-UNNAMED</surefire.argLine.extra>
     </properties>
 
     <dependencies>
@@ -52,7 +35,6 @@
             <artifactId>ringos-unsafe-operations-api</artifactId>
             <version>${project.version}</version>
         </dependency>
-
         <!--
             Runtime-only: these carry the version-specific UnsafeOperations classes (some compiled to newer
             class-file versions). They are referenced only by class name and loaded reflectively from the
@@ -83,13 +65,7 @@
         <plugins>
             <!-- Central requires a -sources.jar and a -javadoc.jar beside every artifact whose
                  packaging is not `pom`, and this module has no src/main/java for either plugin to
-                 build one from. `pom` packaging would lift the requirement, but it would also make
-                 every consumer write <type>pom</type> on a dependency whose whole point is being the
-                 one artifact you name — and this module's tests would have no lifecycle to run in.
-                 So Central's other allowance applies: a placeholder jar. Both hold src/placeholder,
-                 which says what the artifact is and where its sources actually live.
-                 Declared here rather than in the parent's pluginManagement, where an added execution
-                 would also fire in lib-impl-testkit, the one other module declaring this plugin. -->
+                 build one from. `pom` packaging would lift the requirement. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -120,5 +96,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

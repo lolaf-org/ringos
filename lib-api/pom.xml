@@ -46,7 +46,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <compilerArgs>
-                        <!-- needed to have access Contended class -->
                         <arg>--add-exports</arg>
                         <arg>java.base/jdk.internal.vm.annotation=ALL-UNNAMED</arg>
                     </compilerArgs>

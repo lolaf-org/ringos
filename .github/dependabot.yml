@@ -1,15 +1,3 @@
-# Two ecosystems, watched for different reasons.
-#
-# The actions are the half nothing else looks at: a stale setup-java is how the JDK 11 and 25
-# toolchains quietly stop resolving after a runner image change.
-#
-# Maven was deliberately left off this file until 2026-08-27, on the grounds that
-# show-versions-updates.sh and update-versions.sh already do the job deliberately rather than as a
-# stream of pull requests. What changed is that ringos now publishes: a dependency that moves after a
-# release is a dependency someone else has resolved, and finding out on the next hand-run sweep is
-# too late. So Maven is watched here too, and the two routes are meant to agree - the policy below
-# mirrors versions-maven-plugin's configuration in the root pom, and the scripts stay for the
-# deliberate sweep.
 version: 2
 
 updates:
@@ -20,9 +8,6 @@ updates:
     commit-message:
       prefix: ci
 
-  # `directory: /` is the whole reactor, not just the root pom: the Maven fetcher follows <modules>,
-  # so all seventeen poms are in scope. Almost every version lives as a property in the root pom
-  # anyway, which is the file the pull requests will touch.
   - package-ecosystem: maven
     directory: /
     schedule:
@@ -31,10 +16,7 @@ updates:
     commit-message:
       prefix: deps
 
-    # Without grouping this is two dozen pinned versions arriving one pull request at a time, each
-    # one a full build of the reactor. Grouped, a quiet week is one pull request per group or none.
-    # Dependabot applies the first group that matches; what matches nothing - jna, lombok itself -
-    # keeps its own pull request, which is what those two deserve.
+    # Without grouping this is two dozen pinned versions arriving one pull request at a time
     groups:
       maven-plugins:
         patterns:
@@ -62,12 +44,7 @@ updates:
           - "net.openhft:*"
           - "tools.profiler:*"
 
-    # These two mirror versions-maven-plugin in the root pom - <allowMajorUpdates>false</> and
-    # <dependencyExcludes>org.slf4j:*</> - so the hand-run sweep and Dependabot cannot disagree about
-    # what is allowed to move. Change one and change the other.
-    #
-    # A major is a decision, not an upgrade, and it is not one to take from a pull request that
-    # arrived on a Monday. slf4j is held at 2.0.x deliberately.
+    # slf4j is held at 2.0.x deliberately.
     ignore:
       - dependency-name: "*"
         update-types:

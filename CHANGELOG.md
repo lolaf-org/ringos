@@ -13,8 +13,7 @@ the heading in the commit before triggering the release.
 
 ## [1.0.0] - 2026-08-27
 
-First public release. Ringos has lived inside a private monorepo until now; this is the same code,
-published under `org.lolaf.ringos` on Maven Central.
+First public release.
 
 ### Added
 

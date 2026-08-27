@@ -1,35 +1,69 @@
 name: release
 
-# Manual only. A release is a decision, not a consequence of pushing something: the version to cut is
-# typed in here, and nothing about a tag or a branch can trigger it by accident.
+# Manual only. A release is a decision, not a consequence of pushing something: the versions to cut and
+# to return to are typed in here, and nothing about a tag or a branch can trigger it by accident.
+#
+# maven-release-plugin does the version work. It sets the release version across all seventeen modules,
+# runs the full build as a gate, commits, tags, sets the next development version, commits, and pushes
+# both commits and the tag together - then checks the tag out fresh and deploys it. So the artifacts
+# provably come from a tagged commit whose poms carry the version being released, which is the whole
+# point of doing it this way rather than setting the version in the runner's working tree.
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to publish, without a leading v (e.g. 0.1.0)'
+      releaseVersion:
+        description: 'Version to release, without a leading v (e.g. 0.1.0)'
         required: true
         type: string
+      developmentVersion:
+        description: 'Version to leave main on afterwards (e.g. 0.2.0-SNAPSHOT)'
+        required: true
+        type: string
+      dryRun:
+        description: 'Rehearse: build and verify only - no commit, no tag, no push, no upload'
+        required: false
+        default: false
+        type: boolean
 
-# Two releases running at once would race each other into the Portal with the same coordinates.
+# Two releases running at once would race each other into the Portal with the same coordinates, and
+# worse, into main with two different versions.
 concurrency:
   group: release
   cancel-in-progress: false
 
+# The automatic token does nothing here. CI_GITHUB_TOKEN pushes, and it is a credential of its own.
 permissions:
   contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Two full builds of the reactor: release:prepare gates on `clean verify`, then release:perform
+    # re-clones the tag and runs `deploy`. Each is a couple of minutes warm; the ceiling is for a cold
+    # runner with an empty ~/.m2.
+    timeout-minutes: 45
 
     steps:
+      # `token` is what makes this workflow able to release at all: it writes the
+      # http.https://github.com/.extraheader credential into the checkout's git config, which is what
+      # maven-release-plugin's `git push` then authenticates with. main requires the `build` check and
+      # nothing has run it on a commit that does not exist yet, so the push only lands because that token
+      # acts as a repository admin and enforce_admins is off. Proven before this workflow was written,
+      # by the throwaway .github/workflows/token-check.yml.
+      #
+      # fetch-depth: 0 because a push from a shallow clone is refused.
       - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.CI_GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      # Same three JDKs as the build workflow, and for the same reason: listing them here is what
-      # writes the ~/.m2/toolchains.xml that lib-impl-unsafe-11, unsafe-operations-impl-11-14 and
-      # unsafe-operations-impl-25 resolve against. A release built without them is a release built
-      # against the wrong API.
+      # Several modules compile against JDK internals that moved between releases and so build through a
+      # toolchain: unsafe-operations-impl-11-14 and lib-impl-unsafe-11 ask for 11, unsafe-operations-impl-25
+      # asks for 25. Listing the versions here is what writes the ~/.m2/toolchains.xml they resolve against.
+      # A release built without them is a release built against the wrong API.
+      #
+      # release:perform re-clones into target/checkout and forks a fresh Maven, but ~/.m2 is shared, so the
+      # toolchains reach that build too.
       - uses: actions/setup-java@v5
         with:
           distribution: zulu
@@ -38,13 +72,13 @@ jobs:
             21
             25
 
-      # The JDK Maven itself runs on, and the step that writes settings.xml and imports the signing
-      # key. server-username/server-password are the NAMES of environment variables the generated
-      # settings.xml refers to, not values - the secrets themselves are set on the mvn step below.
+      # The JDK Maven itself runs on, and the step that writes settings.xml and imports the signing key.
+      # server-username/server-password are the NAMES of environment variables the generated settings.xml
+      # refers to, not values - the secrets themselves are set on the deploy step below.
       #
-      # gpg-passphrase is deliberately NOT passed: it would put the passphrase into settings.xml,
-      # which maven-gpg-plugin refuses under bestPractices=true. The plugin reads
-      # MAVEN_GPG_PASSPHRASE from the environment instead.
+      # gpg-passphrase is deliberately NOT passed: it would put the passphrase into settings.xml, which
+      # maven-gpg-plugin refuses under bestPractices=true. The plugin reads MAVEN_GPG_PASSPHRASE from the
+      # environment instead.
       - uses: actions/setup-java@v5
         with:
           distribution: zulu
@@ -55,24 +89,70 @@ jobs:
           server-password: CENTRAL_TOKEN_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
 
-      # What arrived is the signing subkey and a stub of the primary, so this proves the runner can
-      # sign and nothing more. Fingerprints only - never the key.
+      # What arrived is the signing subkey and a stub of the primary, so this proves the runner can sign
+      # and nothing more. Fingerprints only - never the key.
       - name: Show what was imported
         run: gpg --list-secret-keys --keyid-format=long --with-subkey-fingerprints
 
-      # In the working tree only, never committed: the tag is what records the version in history,
-      # and it is made by hand.
-      - name: Set the version
-        run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
+      # maven-release-plugin makes two commits, and git refuses to commit without an identity. This is
+      # deliberately not the signing key's uid (cmunger <security@lolaf.org>): the commits are made by
+      # automation and say so, while the address that receives security reports stays what SECURITY.md
+      # points at.
+      - name: Identify the release commits
+        run: |
+          git config user.name "ringos release"
+          git config user.email "admin@lolaf.org"
 
-      # -Prelease adds the signing and the Portal upload. autoPublish is false, so this ends with the
-      # deployment validated and waiting in the Portal for someone to press publish or drop it.
-      - name: Build, sign and upload to the Portal
+      # Sets the version everywhere, runs `clean verify` as the gate, commits, tags v<version>, sets the
+      # development version, commits, and pushes all of it. Everything about the shape of that - the tag
+      # name, taking the version for every module, the commit messages, and not activating the super-POM's
+      # release-profile - is configured on maven-release-plugin in the parent pom, not here.
+      #
+      # Where a failure leaves things, since the answer is not obvious: the plugin commits and tags
+      # locally and pushes only at the very end, so anything that breaks during `clean verify` - the
+      # likely case - has touched nothing remote, and the runner is discarded with the mess on it. If
+      # prepare pushed and perform then failed, main and the tag are real and only the deployment is
+      # missing: fix the cause, then run release:perform against the tag rather than re-running this
+      # workflow, which would try to cut the version again.
+      #
+      # What dryRun does, precisely, because it is less than the name suggests. The plugin runs its
+      # phases in simulation: each pom is rewritten to pom.xml.tag and pom.xml.next beside it while
+      # pom.xml itself is left untouched, and nothing is committed, tagged or pushed. `clean verify`
+      # does still run - but against those untouched poms, so it builds 1.0.0-SNAPSHOT rather than the
+      # version being released. The plugin says as much itself: "Executing preparation goals - since
+      # this is simulation mode it is running against the original project, not the rewritten ones".
+      # Signing and the Portal upload are not rehearsed at all, both living in release:perform, which
+      # the step below skips. So a dry run proves the version arithmetic - readable in the pom.xml.tag
+      # files, which nothing currently collects off the runner - and that the reactor is green. It does
+      # not prove the reactor is green at the release version, nor the push, the tag, the signature or
+      # the upload.
+      #
+      # No secret is needed here - nothing in `clean verify` signs or uploads.
+      - name: Prepare the release
+        run: |
+          mvn -B release:prepare \
+            -DreleaseVersion=${{ inputs.releaseVersion }} \
+            -DdevelopmentVersion=${{ inputs.developmentVersion }} \
+            -DdryRun=${{ inputs.dryRun }}
+
+      # Checks the tag out fresh into target/checkout and forks a second Maven that runs `deploy` on it.
+      # The -Prelease that turns that into a signed Portal upload is deliberately not passed here: it
+      # comes from <releaseProfiles>release</releaseProfiles> on maven-release-plugin in the parent pom,
+      # which release:perform appends to the forked build's command line. (That parameter exists on
+      # perform and not on prepare, which is why the gate build above is unsigned.) gpg's sign execution
+      # is bound to `verify`, which precedes `deploy`, so every artifact is signed before
+      # central-publishing-maven-plugin bundles and uploads it. The secrets below reach that forked
+      # Maven because it inherits this step's environment.
+      #
+      # autoPublish is false, so this ends with the deployment validated and waiting in the Portal for
+      # someone to press publish or drop it.
+      - name: Build, sign and upload the tag to the Portal
+        if: ${{ !inputs.dryRun }}
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: mvn -B -T1C -Prelease deploy
+        run: mvn -B release:perform
 
       - name: Upload surefire reports
         if: failure()

@@ -37,7 +37,7 @@
              jdk.internal.misc is not opened, so this module's forks do not get that open by default; the
              second execution adds it back for itself. Blanked here rather than dropped by overriding
              <argLine>, which would take the @Contended flags with it. -->
-        <surefire.argLine.jdkInternalMisc></surefire.argLine.jdkInternalMisc>
+        <surefire.argLine.jdkInternalMisc/>
     </properties>
 
     <description>

@@ -70,6 +70,39 @@ jobs:
           token: ${{ secrets.CI_GITHUB_TOKEN }}
           fetch-depth: 0
 
+      # Where the release notes come from, and why not from git. Nearly all of this repository's work
+      # lands as a direct push to main - only Dependabot opens pull requests - so GitHub's generated
+      # notes, which are built from merged pull requests, would describe Dependabot's week and nothing
+      # about ringos. The notes are the CHANGELOG.md section for the version instead, which also means
+      # that section has to exist before the release runs. Checked here, where it costs two seconds,
+      # rather than discovered after a twenty-minute build and an irreversible tag.
+      #
+      # The section is extracted once and left in /tmp for the release step at the end of the job.
+      - name: Check the changelog has a section for this version
+        id: changelog
+        run: |
+          if [ "${{ inputs.performOnly }}" = "true" ]; then
+            version="${{ inputs.tag }}"
+            version="${version#v}"
+          else
+            version="${{ inputs.releaseVersion }}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## /            { exit }
+            found && /^\[[^]]+\]:/      { exit }
+            found                       { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no non-empty '## [$version]' section. Promote it out of [Unreleased] and commit before releasing."
+            exit 1
+          fi
+          echo "--- release notes for $version ---"
+          cat /tmp/release-notes.md
+
       # Several modules compile against JDK internals that moved between releases and so build through a
       # toolchain: unsafe-operations-impl-11-14 and lib-impl-unsafe-11 ask for 11, unsafe-operations-impl-25
       # asks for 25. Listing the versions here is what writes the ~/.m2/toolchains.xml they resolve against.
@@ -227,6 +260,28 @@ jobs:
             cat release.properties
           fi
           mvn -B release:perform
+
+      # Created only once the deployment has validated in the Portal, so a GitHub Release can never
+      # announce artifacts that failed to publish. The body is the CHANGELOG.md section extracted at
+      # the top of the job.
+      #
+      # CI_GITHUB_TOKEN rather than the automatic token: it already carries Contents: read/write for
+      # this repository, so creating a release grants nothing new, and the job's own permissions stay
+      # at contents: read. --verify-tag refuses to invent a release for a tag that is not there.
+      - name: Create the GitHub Release
+        if: ${{ !inputs.dryRun }}
+        env:
+          GH_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.performOnly }}" = "true" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="v${{ inputs.releaseVersion }}"
+          fi
+          gh release create "$tag" \
+            --title "ringos ${{ steps.changelog.outputs.version }}" \
+            --notes-file /tmp/release-notes.md \
+            --verify-tag
 
       - name: Upload surefire reports
         if: failure()

@@ -222,6 +222,11 @@ To run the JMH benchmarks:
 java -jar benchmarks/target/benchmarks.jar
 ```
 
+## Changelog
+
+What changed in each release is in [CHANGELOG.md](CHANGELOG.md), and the same text is the body of
+each [GitHub Release](https://github.com/lolaf-org/ringos/releases).
+
 ## Contributing
 
 Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build it and

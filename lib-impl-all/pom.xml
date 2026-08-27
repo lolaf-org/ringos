@@ -16,14 +16,12 @@
     limitations under the License.
 
 -->
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.lolaf.ringos</groupId>
         <artifactId>ringos-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>ringos-lib-impl-all</artifactId>
@@ -37,7 +35,7 @@
              jdk.internal.misc is not opened, so this module's forks do not get that open by default; the
              second execution adds it back for itself. Blanked here rather than dropped by overriding
              <argLine>, which would take the @Contended flags with it. -->
-        <surefire.argLine.jdkInternalMisc/>
+        <surefire.argLine.jdkInternalMisc />
     </properties>
 
     <description>

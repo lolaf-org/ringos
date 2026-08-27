@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.lolaf.ringos</groupId>
         <artifactId>ringos-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>ringos-unsafe-operations-impl-11-14</artifactId>
@@ -25,7 +23,7 @@
         <!-- These tests fork the JDK 11 toolchain, which rejects the native-access flag outright
              ("Unrecognized option: enable-native-access"). Blanking that one piece keeps the rest of the
              shared argLine instead of replacing the whole of it to drop a single argument. -->
-        <surefire.argLine.nativeAccess/>
+        <surefire.argLine.nativeAccess />
         <!-- jdk.internal.ref is the one open this module needs that the shared set does not carry. -->
         <surefire.argLine.extra>--add-opens java.base/jdk.internal.ref=ALL-UNNAMED</surefire.argLine.extra>
 

@@ -16,15 +16,12 @@
     limitations under the License.
 
 -->
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
-         child.project.url.inherit.append.path="false">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.lolaf.ringos</groupId>
     <artifactId>ringos-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Ringos</name>
@@ -76,7 +73,7 @@
              pom is deployed to Central exactly as written here, uninterpolated, so anyone rebuilding
              the tag would resolve it to their own clock and the reproducibility this buys would be
              gone. (The plugin would also overwrite the reference with a literal on the first release.) -->
-        <project.build.outputTimestamp>2026-08-27T00:00:00Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-08-27T18:56:33Z</project.build.outputTimestamp>
         <!-- source/target is the fallback, not the default anyone should want: it compiles against the
              BUILD JDK's API, so a call to a post-11 method compiles clean at target 11 and then throws
              NoSuchMethodError on a real JDK 11. Every module that can sets maven.compiler.release=11
@@ -143,7 +140,7 @@
         <surefire.argLine.jdkInternalMisc>--add-opens java.base/jdk.internal.misc=ALL-UNNAMED</surefire.argLine.jdkInternalMisc>
 
         <!-- Anything a single module needs on top of the shared set. -->
-        <surefire.argLine.extra/>
+        <surefire.argLine.extra />
 
         <automatic.module.name>org.lolaf.ringos.MODULE.NAME.NOT.SET</automatic.module.name>
 
@@ -185,16 +182,14 @@
          published pom would name https://github.com/lolaf-org/ringos/ringos-lib-api and an scm
          connection to match. Central does not check that either resolves, so it would publish the
          dead links and they would be permanent. Needs Maven 3.6.1+. -->
-    <scm child.scm.connection.inherit.append.path="false"
-         child.scm.developerConnection.inherit.append.path="false"
-         child.scm.url.inherit.append.path="false">
+    <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
         <connection>scm:git:https://github.com/lolaf-org/ringos.git</connection>
         <!-- HTTPS rather than the conventional ssh: the release is cut by maven-release-plugin from
              CI, whose credential is a token, and a token is an HTTPS credential. connection and url
              above are what consumers read; this one is only ever used by whatever pushes. -->
         <developerConnection>scm:git:https://github.com/lolaf-org/ringos.git</developerConnection>
         <url>https://github.com/lolaf-org/ringos</url>
-        <tag>HEAD</tag>
+        <tag>v0.1.0</tag>
     </scm>
 
     <issueManagement>

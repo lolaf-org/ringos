@@ -23,7 +23,7 @@ jobs:
       # toolchain: unsafe-operations-impl-11-14 and lib-impl-unsafe-11 ask for 11, unsafe-operations-impl-25
       # asks for 25. Listing the versions here is what writes the ~/.m2/toolchains.xml they resolve against,
       # so dropping one breaks those modules rather than skipping them.
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: |
@@ -31,7 +31,7 @@ jobs:
             21
             25
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21

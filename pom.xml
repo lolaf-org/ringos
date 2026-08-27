@@ -21,7 +21,7 @@
 
     <groupId>org.lolaf.ringos</groupId>
     <artifactId>ringos-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Ringos</name>
@@ -73,7 +73,7 @@
              pom is deployed to Central exactly as written here, uninterpolated, so anyone rebuilding
              the tag would resolve it to their own clock and the reproducibility this buys would be
              gone. (The plugin would also overwrite the reference with a literal on the first release.) -->
-        <project.build.outputTimestamp>2026-08-27T18:56:33Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-08-27T18:57:35Z</project.build.outputTimestamp>
         <!-- source/target is the fallback, not the default anyone should want: it compiles against the
              BUILD JDK's API, so a call to a post-11 method compiles clean at target 11 and then throws
              NoSuchMethodError on a real JDK 11. Every module that can sets maven.compiler.release=11
@@ -189,7 +189,7 @@
              above are what consumers read; this one is only ever used by whatever pushes. -->
         <developerConnection>scm:git:https://github.com/lolaf-org/ringos.git</developerConnection>
         <url>https://github.com/lolaf-org/ringos</url>
-        <tag>v0.1.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <issueManagement>

@@ -200,9 +200,16 @@ jobs:
       # autoPublish is false, so this ends with the deployment validated and waiting in the Portal for
       # someone to press publish or drop it.
       #
-      # Ordinarily perform reads which tag to deploy out of the release.properties that prepare left
-      # behind. Under performOnly there is no such file - prepare did not run in this job - so the tag
-      # and the repository it lives in are named on the command line instead.
+      # Ordinarily perform reads which tag to deploy out of the release.properties that prepare leaves
+      # behind. Under performOnly prepare did not run in this job, and the file belonging to the run
+      # that did died with its runner, so the three entries perform needs are written here.
+      #
+      # Note there is deliberately no -Dtag: `tag` is not a parameter of the perform mojo - the mojo
+      # takes connectionUrl, localCheckout and workingDirectory, and reads the tag from the descriptor.
+      # Passing -Dtag silently does nothing, which is how the first performOnly attempt reached
+      # `git clone` with an empty tag and died on "fatal: repository 'checkout' does not exist".
+      # completedPhase is what CheckCompletedPreparePhasesPhase looks for; without it the run is
+      # refused as a preparation stopped mid-way.
       - name: Build, sign and upload the tag to the Portal
         if: ${{ !inputs.dryRun }}
         env:
@@ -211,12 +218,15 @@ jobs:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           if [ "${{ inputs.performOnly }}" = "true" ]; then
-            mvn -B release:perform \
-              -DconnectionUrl=scm:git:https://github.com/lolaf-org/ringos.git \
-              -Dtag=${{ inputs.tag }}
-          else
-            mvn -B release:perform
+            {
+              echo "completedPhase=end-release"
+              echo "scm.url=scm:git:https://github.com/lolaf-org/ringos.git"
+              echo "scm.tag=${{ inputs.tag }}"
+            } > release.properties
+            echo "--- release.properties ---"
+            cat release.properties
           fi
+          mvn -B release:perform
 
       - name: Upload surefire reports
         if: failure()

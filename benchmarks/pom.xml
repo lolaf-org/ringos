@@ -28,13 +28,11 @@
             <artifactId>ringos-lib-api</artifactId>
             <version>${project.version}</version>
         </dependency>
-
         <dependency>
             <groupId>org.lolaf.ringos</groupId>
             <artifactId>ringos-lib-impl-method-handle</artifactId>
             <version>${project.version}</version>
         </dependency>
-
         <dependency>
             <groupId>org.lolaf.ringos</groupId>
             <artifactId>ringos-lib-impl-unsafe</artifactId>
@@ -45,7 +43,6 @@
             <artifactId>ringos-unsafe-operations-impl-all</artifactId>
             <version>${project.version}</version>
         </dependency>
-
         <dependency>
             <groupId>tools.profiler</groupId>
             <artifactId>async-profiler</artifactId>
@@ -60,11 +57,6 @@
             <groupId>org.openjdk.jol</groupId>
             <artifactId>jol-core</artifactId>
             <version>0.17</version>
-        </dependency>
-        <dependency>
-            <groupId>com.lmax</groupId>
-            <artifactId>disruptor</artifactId>
-            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.openjdk.jmh</groupId>

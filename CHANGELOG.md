@@ -6,10 +6,13 @@ All notable changes to this project are recorded here, in the format of
 
 Each released version needs its own `## [x.y.z] - YYYY-MM-DD` heading here **before** the release is
 cut: the release workflow refuses to run without one, and the GitHub Release for the tag is created
-with that section as its body. Write it while the changes are fresh, under `Unreleased`, and promote
-the heading in the commit before triggering the release.
+with that section as its body. Write it in the commit that precedes the release, together with the
+matching `[x.y.z]:` link definition at the foot of the file.
 
-## [Unreleased]
+There is deliberately no `[Unreleased]` section, which is where Keep a Changelog would collect notes
+between releases. A section is written when the version it belongs to is being cut, so its heading
+carries the right number and date the first time and the workflow's check has exactly one heading it
+could mean.
 
 ## [1.0.0] - 2026-08-27
 
@@ -40,5 +43,4 @@ First public release.
 - All artifacts are signed, carry sources and javadoc, and are built reproducibly — the jars from a
   given tag are byte-identical to the published ones.
 
-[Unreleased]: https://github.com/lolaf-org/ringos/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/lolaf-org/ringos/releases/tag/v1.0.0

@@ -1,13 +1,5 @@
 name: release
 
-# Manual only. A release is a decision, not a consequence of pushing something: the versions to cut and
-# to return to are typed in here, and nothing about a tag or a branch can trigger it by accident.
-#
-# maven-release-plugin does the version work. It sets the release version across all seventeen modules,
-# runs the full build as a gate, commits, tags, sets the next development version, commits, and pushes
-# both commits and the tag together - then checks the tag out fresh and deploys it. So the artifacts
-# provably come from a tagged commit whose poms carry the version being released, which is the whole
-# point of doing it this way rather than setting the version in the runner's working tree.
 on:
   workflow_dispatch:
     inputs:
@@ -25,9 +17,7 @@ on:
         default: false
         type: boolean
       # Recovery, not routine. If prepare pushed and perform then failed, the tag is real and only the
-      # deployment is missing - re-running the whole workflow would try to cut the version a second
-      # time. This skips prepare entirely and deploys an existing tag, which is what the plugin's own
-      # advice for that situation amounts to.
+      # deployment is missing
       performOnly:
         description: 'Skip prepare and deploy an existing tag (set tag below)'
         required: false
@@ -38,22 +28,16 @@ on:
         required: false
         type: string
 
-# Two releases running at once would race each other into the Portal with the same coordinates, and
-# worse, into main with two different versions.
 concurrency:
   group: release
   cancel-in-progress: false
 
-# The automatic token does nothing here. CI_GITHUB_TOKEN pushes, and it is a credential of its own.
 permissions:
   contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Two full builds of the reactor: release:prepare gates on `clean verify`, then release:perform
-    # re-clones the tag and runs `deploy`. Each is a couple of minutes warm; the ceiling is for a cold
-    # runner with an empty ~/.m2.
     timeout-minutes: 45
 
     steps:
@@ -70,14 +54,6 @@ jobs:
           token: ${{ secrets.CI_GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # Where the release notes come from, and why not from git. Nearly all of this repository's work
-      # lands as a direct push to main - only Dependabot opens pull requests - so GitHub's generated
-      # notes, which are built from merged pull requests, would describe Dependabot's week and nothing
-      # about ringos. The notes are the CHANGELOG.md section for the version instead, which also means
-      # that section has to exist before the release runs. Checked here, where it costs two seconds,
-      # rather than discovered after a twenty-minute build and an irreversible tag.
-      #
-      # The section is extracted once and left in /tmp for the release step at the end of the job.
       - name: Check the changelog has a section for this version
         id: changelog
         run: |
@@ -89,27 +65,20 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-          awk -v v="$version" '
-            $0 ~ "^## \\[" v "\\]" { found = 1; next }
-            found && /^## /            { exit }
-            found && /^\[[^]]+\]:/      { exit }
-            found                       { print }
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## /         { exit }
+            found && /^\[[^]]+\]:/  { exit }
+            found                   { print }
           ' CHANGELOG.md > /tmp/release-notes.md
 
           if [ ! -s /tmp/release-notes.md ]; then
-            echo "::error::CHANGELOG.md has no non-empty '## [$version]' section. Promote it out of [Unreleased] and commit before releasing."
+            echo "::error::CHANGELOG.md has no non-empty '## [$version]' section. Write one, with its [$version]: link definition, and commit it before releasing."
             exit 1
           fi
           echo "--- release notes for $version ---"
           cat /tmp/release-notes.md
 
-      # Several modules compile against JDK internals that moved between releases and so build through a
-      # toolchain: unsafe-operations-impl-11-14 and lib-impl-unsafe-11 ask for 11, unsafe-operations-impl-25
-      # asks for 25. Listing the versions here is what writes the ~/.m2/toolchains.xml they resolve against.
-      # A release built without them is a release built against the wrong API.
-      #
-      # release:perform re-clones into target/checkout and forks a fresh Maven, but ~/.m2 is shared, so the
-      # toolchains reach that build too.
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -118,13 +87,6 @@ jobs:
             21
             25
 
-      # The JDK Maven itself runs on, and the step that writes settings.xml and imports the signing key.
-      # server-username/server-password are the NAMES of environment variables the generated settings.xml
-      # refers to, not values - the secrets themselves are set on the deploy step below.
-      #
-      # gpg-passphrase is deliberately NOT passed: it would put the passphrase into settings.xml, which
-      # maven-gpg-plugin refuses under bestPractices=true. The plugin reads MAVEN_GPG_PASSPHRASE from the
-      # environment instead.
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -135,34 +97,6 @@ jobs:
           server-password: CENTRAL_TOKEN_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
 
-      # There is deliberately no step listing the imported keyring here. It printed fingerprints, which
-      # is exactly the key id GPG_KEYNAME now exists to keep out of the pom, and the workflow log is a
-      # worse place to leak it than the pom was. The probe below covers what it was there to diagnose:
-      # a key that did not import, or did not match GPG_KEYNAME, fails on the probe signature instead.
-      #
-      # Prove the runner can actually sign, before spending twenty minutes building something it turns
-      # out it cannot sign. The 0.1.0 run got all the way through `clean verify`, the tag, both pushes
-      # and into the deploy before dying on gpg:sign of the very first artifact; this makes that
-      # failure arrive in two seconds instead of twenty minutes.
-      #
-      # It also configures the agent, which is the half that is not merely diagnostic:
-      #
-      #   allow-loopback-pinentry is the default in GnuPG 2.2+, but setup-java v6 imports the key into
-      #   a fresh temporary GNUPGHOME (see the exported GNUPGHOME above) that contains no
-      #   gpg-agent.conf at all, so it is written explicitly rather than assumed. There is no pinentry
-      #   program on the runner to fall back to - "gpg: signing failed: No pinentry" is exactly how the
-      #   0.1.0 run died.
-      #
-      #   The cache TTLs matter because of what signing this reactor involves: maven-gpg-plugin only
-      #   passes --passphrase-fd when it holds a passphrase of its own, and in release:perform the
-      #   signing happens inside a Maven that the plugin forks. Priming the agent here means the
-      #   passphrase is available to every gpg invocation in that forked build regardless, which is
-      #   the "rely on GnuPG agent" route that gpg.bestPractices explicitly endorses. Two hours is
-      #   comfortably longer than the build and the runner is destroyed after it.
-      #
-      # The probe signature is made and verified, and --local-user is the same GPG_KEYNAME the deploy
-      # will hand maven-gpg-plugin, so a broken key, a wrong passphrase, a keyname that matches nothing
-      # in the imported keyring or a misconfigured agent all fail here rather than mid-deploy.
       - name: Configure the gpg agent and prove signing works
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -187,40 +121,11 @@ jobs:
           rm -f /tmp/sign-probe.txt /tmp/sign-probe.asc
           echo "signing works, and the agent now holds the passphrase"
 
-      # maven-release-plugin makes two commits, and git refuses to commit without an identity. This is
-      # deliberately not the signing key's uid (cmunger <security@lolaf.org>): the commits are made by
-      # automation and say so, while the address that receives security reports stays what SECURITY.md
-      # points at.
       - name: Identify the release commits
         run: |
           git config user.name "ringos release"
           git config user.email "admin@lolaf.org"
 
-      # Sets the version everywhere, runs `clean verify` as the gate, commits, tags v<version>, sets the
-      # development version, commits, and pushes all of it. Everything about the shape of that - the tag
-      # name, taking the version for every module, the commit messages, and not activating the super-POM's
-      # release-profile - is configured on maven-release-plugin in the parent pom, not here.
-      #
-      # Where a failure leaves things, since the answer is not obvious: the plugin commits and tags
-      # locally and pushes only at the very end, so anything that breaks during `clean verify` - the
-      # likely case - has touched nothing remote, and the runner is discarded with the mess on it. If
-      # prepare pushed and perform then failed, main and the tag are real and only the deployment is
-      # missing: fix the cause, then run release:perform against the tag rather than re-running this
-      # workflow, which would try to cut the version again.
-      #
-      # What dryRun does, precisely, because it is less than the name suggests. The plugin runs its
-      # phases in simulation: each pom is rewritten to pom.xml.tag and pom.xml.next beside it while
-      # pom.xml itself is left untouched, and nothing is committed, tagged or pushed. `clean verify`
-      # does still run - but against those untouched poms, so it builds 1.0.0-SNAPSHOT rather than the
-      # version being released. The plugin says as much itself: "Executing preparation goals - since
-      # this is simulation mode it is running against the original project, not the rewritten ones".
-      # Signing and the Portal upload are not rehearsed at all, both living in release:perform, which
-      # the step below skips. So a dry run proves the version arithmetic - readable in the pom.xml.tag
-      # files, which nothing currently collects off the runner - and that the reactor is green. It does
-      # not prove the reactor is green at the release version, nor the push, the tag, the signature or
-      # the upload.
-      #
-      # No secret is needed here - nothing in `clean verify` signs or uploads.
       - name: Prepare the release
         if: ${{ !inputs.performOnly }}
         run: |
@@ -229,46 +134,6 @@ jobs:
             -DdevelopmentVersion=${{ inputs.developmentVersion }} \
             -DdryRun=${{ inputs.dryRun }}
 
-      # Checks the tag out fresh into target/checkout and forks a second Maven that runs `deploy` on it.
-      # The -Prelease that turns that into a signed Portal upload is deliberately not passed here: it
-      # comes from <releaseProfiles>release</releaseProfiles> on maven-release-plugin in the parent pom,
-      # which release:perform appends to the forked build's command line. (That parameter exists on
-      # perform and not on prepare, which is why the gate build above is unsigned.) gpg's sign execution
-      # is bound to `verify`, which precedes `deploy`, so every artifact is signed before
-      # central-publishing-maven-plugin bundles and uploads it. The secrets below reach that forked
-      # Maven because it inherits this step's environment.
-      #
-      # The tests do not run again here. prepare has just run the whole suite - 2272 tests - against the
-      # very source this deploys, since the tag is the commit prepare made from the tree it verified, and
-      # the build is reproducible, so a second run cannot change what is published. It can only fail, and
-      # it would fail at the worst moment: the tag and both commits are pushed by then, which is the
-      # half-done state performOnly exists to dig out of. The gate belongs in prepare, before anything is
-      # irreversible. -DskipTests rather than -Dmaven.test.skip: test sources still compile, which is a
-      # real check and nearly free.
-      #
-      # It goes through release.extraArguments rather than -Darguments= because the pom sets <arguments>,
-      # which makes -Darguments= on the command line a silently ignored no-op. The pom explains it.
-      #
-      # -Dgpg.keyname rides the same route, and has to: the pom no longer names the signing key, and a
-      # -D on this outer Maven would not reach the forked build that actually runs gpg:sign. Unlike the
-      # passphrase, which the plugin reads from MAVEN_GPG_PASSPHRASE in the inherited environment,
-      # keyname has no env-var default in maven-gpg-plugin 3.2.x - only the gpg.keyname user property -
-      # so the secret is expanded onto the forked command line here. It is a key id, not key material;
-      # it is a secret only so the pom does not advertise which key this project signs with.
-      #
-      # autoPublish is false, so this ends with the deployment validated and waiting in the Portal for
-      # someone to press publish or drop it.
-      #
-      # Ordinarily perform reads which tag to deploy out of the release.properties that prepare leaves
-      # behind. Under performOnly prepare did not run in this job, and the file belonging to the run
-      # that did died with its runner, so the three entries perform needs are written here.
-      #
-      # Note there is deliberately no -Dtag: `tag` is not a parameter of the perform mojo - the mojo
-      # takes connectionUrl, localCheckout and workingDirectory, and reads the tag from the descriptor.
-      # Passing -Dtag silently does nothing, which is how the first performOnly attempt reached
-      # `git clone` with an empty tag and died on "fatal: repository 'checkout' does not exist".
-      # completedPhase is what CheckCompletedPreparePhasesPhase looks for; without it the run is
-      # refused as a preparation stopped mid-way.
       - name: Build, sign and upload the tag to the Portal
         if: ${{ !inputs.dryRun }}
         env:
@@ -288,13 +153,6 @@ jobs:
           fi
           mvn -B release:perform -Drelease.extraArguments="-DskipTests -Dgpg.keyname=$GPG_KEYNAME"
 
-      # Created only once the deployment has validated in the Portal, so a GitHub Release can never
-      # announce artifacts that failed to publish. The body is the CHANGELOG.md section extracted at
-      # the top of the job.
-      #
-      # CI_GITHUB_TOKEN rather than the automatic token: it already carries Contents: read/write for
-      # this repository, so creating a release grants nothing new, and the job's own permissions stay
-      # at contents: read. --verify-tag refuses to invent a release for a tag that is not there.
       - name: Create the GitHub Release
         if: ${{ !inputs.dryRun }}
         env:

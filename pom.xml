@@ -4,7 +4,7 @@
 
     <groupId>org.lolaf.ringos</groupId>
     <artifactId>ringos-parent</artifactId>
-    <version>0.9.0</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Ringos</name>
@@ -39,7 +39,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Reproducible builds -->
-        <project.build.outputTimestamp>2026-09-09T18:50:05Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-09-09T18:51:13Z</project.build.outputTimestamp>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
@@ -114,7 +114,7 @@
         <connection>scm:git:https://github.com/lolaf-org/ringos.git</connection>
         <developerConnection>scm:git:https://github.com/lolaf-org/ringos.git</developerConnection>
         <url>https://github.com/lolaf-org/ringos</url>
-        <tag>v0.9.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <issueManagement>

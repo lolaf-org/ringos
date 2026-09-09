@@ -14,7 +14,7 @@ between releases. A section is written when the version it belongs to is being c
 carries the right number and date the first time and the workflow's check has exactly one heading it
 could mean.
 
-## [1.0.0] - 2026-08-27
+## [0.9.0] - 2026-09-09
 
 First public release.
 
@@ -43,4 +43,4 @@ First public release.
 - All artifacts are signed, carry sources and javadoc, and are built reproducibly — the jars from a
   given tag are byte-identical to the published ones.
 
-[1.0.0]: https://github.com/lolaf-org/ringos/releases/tag/v1.0.0
+[0.9.0]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.0

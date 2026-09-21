@@ -17,7 +17,7 @@ jobs:
   # Reports the check `build / build`, which is what branch protection on main requires.
   # The whole of ringos builds in about a minute locally; the default 20-minute ceiling is for a cold runner.
   build:
-    uses: lolaf-org/workflows/.github/workflows/maven-build.yml@v1.0.0
+    uses: lolaf-org/workflows/.github/workflows/maven-build.yml@v1.0.1
     with:
       # Several modules compile against JDK internals that moved between releases and so build through a
       # toolchain: unsafe-operations-impl-11-14 and lib-impl-unsafe-11 ask for 11, unsafe-operations-impl-25

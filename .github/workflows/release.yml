@@ -36,18 +36,14 @@ permissions:
   contents: read
 
 jobs:
-  # Everything else - checkout with the release token, the changelog gate, signing, prepare, perform and the
-  # GitHub Release - is in the shared workflow. It needs CI_GITHUB_TOKEN, the three GPG_* secrets and the two
-  # CENTRAL_TOKEN_* secrets, all org secrets shared with this repository.
   release:
-    uses: lolaf-org/workflows/.github/workflows/maven-release.yml@v1.0.0
+    uses: lolaf-org/workflows/.github/workflows/maven-release.yml@v1.0.2
     with:
       release-version: ${{ inputs.releaseVersion }}
       development-version: ${{ inputs.developmentVersion }}
       dry-run: ${{ inputs.dryRun }}
       perform-only: ${{ inputs.performOnly }}
       tag: ${{ inputs.tag }}
-      # The modules that build through a toolchain need their JDKs here as much as in build.yml.
       toolchain-jdks: |
         11
         21

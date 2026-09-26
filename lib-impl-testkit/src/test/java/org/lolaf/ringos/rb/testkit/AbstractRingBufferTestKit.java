@@ -16,6 +16,7 @@
 package org.lolaf.ringos.rb.testkit;
 
 import org.lolaf.ringos.idling.IdleStrategy;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.RingBuffer;
 import org.lolaf.ringos.rb.RingBufferBuilder;
 import org.lolaf.ringos.rb.RingBufferFactory.AccessType;
@@ -109,6 +110,21 @@ public abstract class AbstractRingBufferTestKit {
         } else {
             buffer.offerBlocking(new Element(name), idleStrategy);
         }
+    }
+
+    /**
+     * The retrying counterpart of {@link #publish}.
+     *
+     * @param buffer        the buffer to publish into
+     * @param variant       the shape it was built in
+     * @param name          the name to give the element
+     * @param retryStrategy how to wait while the buffer is full, and when to give up
+     * @return {@code true} if it was published, {@code false} if {@code retryStrategy} gave up
+     */
+    protected boolean publishRetrying(RingBuffer<Element> buffer, Variant variant, String name, RetryStrategy retryStrategy) {
+        return variant.isPooled()
+                ? buffer.offerRetrying(Element::setName, name, retryStrategy)
+                : buffer.offerRetrying(new Element(name), retryStrategy);
     }
 
     /**

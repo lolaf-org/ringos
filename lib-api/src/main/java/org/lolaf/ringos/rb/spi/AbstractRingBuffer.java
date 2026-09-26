@@ -21,6 +21,7 @@ import jdk.internal.vm.annotation.Contended;
 import org.lolaf.ringos.unsafe.UnsafeOperations;
 import org.lolaf.ringos.unsafe.UnsafeOperationsApi;
 import org.lolaf.ringos.idling.IdleStrategy;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -192,6 +193,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
     }
 
     @Override
+    public boolean offerRetrying(T element, RetryStrategy retryStrategy) {
+        if (offer(element)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(element));
+        return true;
+    }
+
+    @Override
     public <A> void offerBlocking(EventTranslatorOneArg<T, A> eventTranslator, A arg1, IdleStrategy idleStrategy) {
         if (!offer(eventTranslator, arg1)) {
             idleStrategy.reset();
@@ -199,6 +214,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
                 idleStrategy.idle();
             } while (!offer(eventTranslator, arg1));
         }
+    }
+
+    @Override
+    public <A> boolean offerRetrying(EventTranslatorOneArg<T, A> eventTranslator, A arg1, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1));
+        return true;
     }
 
     @Override
@@ -212,6 +241,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
     }
 
     @Override
+    public <A, B> boolean offerRetrying(EventTranslatorTwoArg<T, A, B> eventTranslator, A arg1, B arg2, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1, arg2)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1, arg2));
+        return true;
+    }
+
+    @Override
     public <A, B> void offerBlocking(EventTranslatorThreeLongArg<T, A, B> eventTranslator, long arg1, A arg2, B arg3, IdleStrategy idleStrategy) {
         if (!offer(eventTranslator, arg1, arg2, arg3)) {
             idleStrategy.reset();
@@ -219,6 +262,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
                 idleStrategy.idle();
             } while (!offer(eventTranslator, arg1, arg2, arg3));
         }
+    }
+
+    @Override
+    public <A, B> boolean offerRetrying(EventTranslatorThreeLongArg<T, A, B> eventTranslator, long arg1, A arg2, B arg3, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1, arg2, arg3)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1, arg2, arg3));
+        return true;
     }
 
     @Override
@@ -232,6 +289,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
     }
 
     @Override
+    public <A, B, C> boolean offerRetrying(EventTranslatorThreeArg<T, A, B, C> eventTranslator, A arg1, B arg2, C arg3, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1, arg2, arg3)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1, arg2, arg3));
+        return true;
+    }
+
+    @Override
     public <A, B, C, D> void offerBlocking(EventTranslatorFourArg<T, A, B, C, D> eventTranslator, A arg1, B arg2, C arg3, D arg4, IdleStrategy idleStrategy) {
         if (!offer(eventTranslator, arg1, arg2, arg3, arg4)) {
             idleStrategy.reset();
@@ -242,6 +313,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
     }
 
     @Override
+    public <A, B, C, D> boolean offerRetrying(EventTranslatorFourArg<T, A, B, C, D> eventTranslator, A arg1, B arg2, C arg3, D arg4, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1, arg2, arg3, arg4)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1, arg2, arg3, arg4));
+        return true;
+    }
+
+    @Override
     public <A, B, C, D, E> void offerBlocking(EventTranslatorFiveArg<T, A, B, C, D, E> eventTranslator, A arg1, B arg2, C arg3, D arg4, E arg5, IdleStrategy idleStrategy) {
         if (!offer(eventTranslator, arg1, arg2, arg3, arg4, arg5)) {
             idleStrategy.reset();
@@ -249,6 +334,20 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
                 idleStrategy.idle();
             } while (!offer(eventTranslator, arg1, arg2, arg3, arg4, arg5));
         }
+    }
+
+    @Override
+    public <A, B, C, D, E> boolean offerRetrying(EventTranslatorFiveArg<T, A, B, C, D, E> eventTranslator, A arg1, B arg2, C arg3, D arg4, E arg5, RetryStrategy retryStrategy) {
+        if (offer(eventTranslator, arg1, arg2, arg3, arg4, arg5)) {
+            return true;
+        }
+        retryStrategy.reset();
+        do {
+            if (!retryStrategy.awaitRetry()) {
+                return false;
+            }
+        } while (!offer(eventTranslator, arg1, arg2, arg3, arg4, arg5));
+        return true;
     }
 
     @Override

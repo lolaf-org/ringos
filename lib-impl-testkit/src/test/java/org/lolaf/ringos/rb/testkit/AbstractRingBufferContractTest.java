@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.lolaf.ringos.idling.BackoffIdleStrategy;
 import org.lolaf.ringos.idling.IdleStrategy;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.RingBuffer;
 import org.lolaf.ringos.rb.RingBufferFactory.AccessType;
 
@@ -557,6 +558,54 @@ public abstract class AbstractRingBufferContractTest extends AbstractRingBufferT
         assertThat(buffer.poll().getName()).isEqualTo("immediate");
     }
 
+    @ParameterizedTest
+    @MethodSource("blockingVariants")
+    void offerRetryingDoesNotTouchTheStrategyWhenThereIsRoom(Variant variant) {
+        RingBuffer<Element> buffer = newBuffer(variant, CAPACITY);
+        RetryStrategy retryStrategy = mock(RetryStrategy.class);
+
+        assertThat(publishRetrying(buffer, variant, "immediate", retryStrategy)).isTrue();
+
+        verifyNoInteractions(retryStrategy);
+        assertThat(buffer.poll().getName()).isEqualTo("immediate");
+    }
+
+    @ParameterizedTest
+    @MethodSource("blockingVariants")
+    void offerRetryingWaitsForRoom(Variant variant) {
+        RingBuffer<Element> buffer = newBuffer(variant, CAPACITY);
+        for (int i = 0; i < CAPACITY; i++) {
+            assertThat(publish(buffer, variant, "e" + i)).isTrue();
+        }
+
+        RetryStrategy retryStrategy = spy(RetryStrategy.idlingWhile(new BackoffIdleStrategy(), () -> true));
+        pollAfter(buffer, 250);
+
+        assertThat(publishRetrying(buffer, variant, "blocked", retryStrategy)).isTrue();
+
+        verify(retryStrategy).reset();
+        verify(retryStrategy, atLeast(10)).awaitRetry();
+        assertThat(names(buffer::forEach)).contains("blocked");
+    }
+
+    @ParameterizedTest
+    @MethodSource("blockingVariants")
+    void offerRetryingGivesUpWithoutStoringAnything(Variant variant) {
+        RingBuffer<Element> buffer = newBuffer(variant, CAPACITY);
+        for (int i = 0; i < CAPACITY; i++) {
+            assertThat(publish(buffer, variant, "e" + i)).isTrue();
+        }
+
+        RetryStrategy retryStrategy = mock(RetryStrategy.class);
+        when(retryStrategy.awaitRetry()).thenReturn(true, true, false);
+
+        assertThat(publishRetrying(buffer, variant, "refused", retryStrategy)).isFalse();
+
+        verify(retryStrategy).reset();
+        verify(retryStrategy, times(3)).awaitRetry();
+        assertThat(names(buffer::forEach)).containsExactly("e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7");
+    }
+
     /**
      * The whole point of a pooled buffer: the slot keeps its instance across laps, so a producer that publishes
      * through a translator allocates nothing.
@@ -648,6 +697,30 @@ public abstract class AbstractRingBufferContractTest extends AbstractRingBufferT
                 e -> assertThat(e.getLongArg()).isEqualTo(42L));
     }
 
+    @ParameterizedTest
+    @MethodSource("pooledUnpaddedVariants")
+    void everyRetryingTranslatorOverloadPublishesOnceThereIsRoom(Variant variant) {
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(Element::setName, "late", retry),
+                e -> assertThat(e.getName()).isEqualTo("late"));
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(Element::set, "a", "b", retry),
+                e -> assertThat(e.getArgs()).containsExactly("a", "b", null, null, null));
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(Element::set, "a", "b", "c", retry),
+                e -> assertThat(e.getArgs()).containsExactly("a", "b", "c", null, null));
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(Element::set, "a", "b", "c", "d", retry),
+                e -> assertThat(e.getArgs()).containsExactly("a", "b", "c", "d", null));
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(Element::set, "a", "b", "c", "d", "e", retry),
+                e -> assertThat(e.getArgs()).containsExactly("a", "b", "c", "d", "e"));
+        RingBuffer.EventTranslatorThreeLongArg<Element, String, String> longTranslator = Element::set;
+        assertRetryingTranslatorPublishes(variant,
+                (buffer, retry) -> buffer.offerRetrying(longTranslator, 42L, "a", "b", retry),
+                e -> assertThat(e.getLongArg()).isEqualTo(42L));
+    }
+
     // --- helpers ------------------------------------------------------------------------------------------
 
     /**
@@ -695,6 +768,27 @@ public abstract class AbstractRingBufferContractTest extends AbstractRingBufferT
         check.accept(last);
     }
 
+    private void assertRetryingTranslatorPublishes(Variant variant, RetryingPublish publish, Consumer<Element> check) {
+        RingBuffer<Element> buffer = newBuffer(variant, CAPACITY);
+        for (int i = 0; i < CAPACITY; i++) {
+            assertThat(buffer.offer(Element::setName, "e" + i)).isTrue();
+        }
+
+        RetryStrategy retryStrategy = mock(RetryStrategy.class);
+        when(retryStrategy.awaitRetry()).thenAnswer(invocation -> buffer.poll() != null);
+
+        assertThat(publish.publish(buffer, retryStrategy)).isTrue();
+
+        verify(retryStrategy).reset();
+        verify(retryStrategy).awaitRetry();
+
+        Element last = null;
+        while (buffer.isNotEmpty()) {
+            last = buffer.poll();
+        }
+        check.accept(last);
+    }
+
     private void publishAfter(RingBuffer<Element> buffer, Variant variant, String name, long delayMillis) {
         runAfter(delayMillis, () -> publish(buffer, variant, name));
     }
@@ -727,5 +821,10 @@ public abstract class AbstractRingBufferContractTest extends AbstractRingBufferT
     @FunctionalInterface
     private interface BlockingPublish {
         void publish(RingBuffer<Element> buffer, IdleStrategy idleStrategy);
+    }
+
+    @FunctionalInterface
+    private interface RetryingPublish {
+        boolean publish(RingBuffer<Element> buffer, RetryStrategy retryStrategy);
     }
 }

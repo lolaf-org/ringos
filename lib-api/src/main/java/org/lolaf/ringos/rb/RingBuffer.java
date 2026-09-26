@@ -17,6 +17,7 @@ package org.lolaf.ringos.rb;
 
 
 import org.lolaf.ringos.idling.IdleStrategy;
+import org.lolaf.ringos.idling.RetryStrategy;
 
 import java.time.Duration;
 import java.util.function.Consumer;
@@ -33,7 +34,8 @@ import java.util.function.Consumer;
  * <p>Capacity is a power of two fixed at construction and the buffer never grows: {@link #offer(Object)} returns
  * {@code false} when full and {@link #poll()} returns {@code null} when empty, rather than blocking or
  * allocating. The {@code offerBlocking}/{@code pollBlocking} variants turn that refusal into a wait, idling on an
- * {@link IdleStrategy} until the operation succeeds.
+ * {@link IdleStrategy} until the operation succeeds, and the {@code offerRetrying} variants into a wait a
+ * {@link RetryStrategy} can give up on.
  *
  * <p><b>Element reuse.</b> A buffer built with an element instance producer pre-fills every slot with a long-lived
  * element that is mutated in place rather than replaced, so publishing allocates nothing. Producers then publish
@@ -144,6 +146,17 @@ public interface RingBuffer<T> {
     void offerBlocking(T element, IdleStrategy idleStrategy);
 
     /**
+     * Stores {@code element} at the tail of the buffer, retrying under {@code retryStrategy} for as long as the
+     * buffer stays full.
+     *
+     * @param element       the element to store, under the ownership rule of {@link #offer(Object)}
+     * @param retryStrategy how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                      called on it before the first wait, and not at all when there is room straight away
+     * @return {@code true} if the element was stored, {@code false} if {@code retryStrategy} gave up
+     */
+    boolean offerRetrying(T element, RetryStrategy retryStrategy);
+
+    /**
      * Stores {@code element} at the tail of the buffer, replacing whatever instance the slot held.
      * <p>
      * This is the overload for a buffer built without an element instance producer. On a pre-filled buffer it
@@ -169,6 +182,19 @@ public interface RingBuffer<T> {
      * @param <A>             type of the translator argument
      */
     <A> void offerBlocking(EventTranslatorOneArg<T, A> eventTranslator, A arg1, IdleStrategy idleStrategy);
+
+    /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see {@link #offer(EventTranslatorOneArg, Object)}
+     * @param arg1            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A> boolean offerRetrying(EventTranslatorOneArg<T, A> eventTranslator, A arg1, RetryStrategy retryStrategy);
 
     /**
      * Publishes at the tail by populating the slot's own element from {@code arg1}, allocating nothing.
@@ -197,6 +223,21 @@ public interface RingBuffer<T> {
      * @param <B>             type of the second translator argument
      */
     <A, B> void offerBlocking(EventTranslatorTwoArg<T, A, B> eventTranslator, A arg1, B arg2, IdleStrategy idleStrategy);
+
+    /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see {@link #offer(EventTranslatorTwoArg, Object, Object)}
+     * @param arg1            passed through to the translator
+     * @param arg2            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the first translator argument
+     * @param <B>             type of the second translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A, B> boolean offerRetrying(EventTranslatorTwoArg<T, A, B> eventTranslator, A arg1, B arg2, RetryStrategy retryStrategy);
 
     /**
      * Publishes at the tail by populating the slot's own element from two arguments, allocating nothing.
@@ -229,6 +270,24 @@ public interface RingBuffer<T> {
     <A, B, C> void offerBlocking(EventTranslatorThreeArg<T, A, B, C> eventTranslator, A arg1, B arg2, C arg3, IdleStrategy idleStrategy);
 
     /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see
+     *                        {@link #offer(EventTranslatorThreeArg, Object, Object, Object)}
+     * @param arg1            passed through to the translator
+     * @param arg2            passed through to the translator
+     * @param arg3            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the first translator argument
+     * @param <B>             type of the second translator argument
+     * @param <C>             type of the third translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A, B, C> boolean offerRetrying(EventTranslatorThreeArg<T, A, B, C> eventTranslator, A arg1, B arg2, C arg3, RetryStrategy retryStrategy);
+
+    /**
      * Publishes at the tail by populating the slot's own element from a {@code long} and two references, waiting
      * on {@code idleStrategy} for as long as the buffer stays full.
      *
@@ -243,6 +302,23 @@ public interface RingBuffer<T> {
      * @param <B>             type of the third translator argument
      */
     <A, B> void offerBlocking(EventTranslatorThreeLongArg<T, A, B> eventTranslator, long arg1, A arg2, B arg3, IdleStrategy idleStrategy);
+
+    /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see
+     *                        {@link #offer(EventTranslatorThreeLongArg, long, Object, Object)}
+     * @param arg1            passed through to the translator, unboxed
+     * @param arg2            passed through to the translator
+     * @param arg3            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the second translator argument
+     * @param <B>             type of the third translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A, B> boolean offerRetrying(EventTranslatorThreeLongArg<T, A, B> eventTranslator, long arg1, A arg2, B arg3, RetryStrategy retryStrategy);
 
     /**
      * Publishes at the tail by populating the slot's own element from a {@code long} and two references,
@@ -298,6 +374,26 @@ public interface RingBuffer<T> {
     <A, B, C, D> void offerBlocking(EventTranslatorFourArg<T, A, B, C, D> eventTranslator, A arg1, B arg2, C arg3, D arg4, IdleStrategy idleStrategy);
 
     /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see
+     *                        {@link #offer(EventTranslatorFourArg, Object, Object, Object, Object)}
+     * @param arg1            passed through to the translator
+     * @param arg2            passed through to the translator
+     * @param arg3            passed through to the translator
+     * @param arg4            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the first translator argument
+     * @param <B>             type of the second translator argument
+     * @param <C>             type of the third translator argument
+     * @param <D>             type of the fourth translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A, B, C, D> boolean offerRetrying(EventTranslatorFourArg<T, A, B, C, D> eventTranslator, A arg1, B arg2, C arg3, D arg4, RetryStrategy retryStrategy);
+
+    /**
      * Publishes at the tail by populating the slot's own element from four arguments, allocating nothing.
      *
      * @param eventTranslator populates the slot's element from the arguments, under the visibility rule of
@@ -334,6 +430,28 @@ public interface RingBuffer<T> {
      * @param <E>             type of the fifth translator argument
      */
     <A, B, C, D, E> void offerBlocking(EventTranslatorFiveArg<T, A, B, C, D, E> eventTranslator, A arg1, B arg2, C arg3, D arg4, E arg5, IdleStrategy idleStrategy);
+
+    /**
+     * Publishes at the tail through {@code eventTranslator}, retrying under {@code retryStrategy} for as long as
+     * the buffer stays full.
+     *
+     * @param eventTranslator populates the slot's element; see
+     *                        {@link #offer(EventTranslatorFiveArg, Object, Object, Object, Object, Object)}
+     * @param arg1            passed through to the translator
+     * @param arg2            passed through to the translator
+     * @param arg3            passed through to the translator
+     * @param arg4            passed through to the translator
+     * @param arg5            passed through to the translator
+     * @param retryStrategy   how to wait between attempts and when to give up; {@link RetryStrategy#reset()} is
+     *                        called on it before the first wait, and not at all when there is room straight away
+     * @param <A>             type of the first translator argument
+     * @param <B>             type of the second translator argument
+     * @param <C>             type of the third translator argument
+     * @param <D>             type of the fourth translator argument
+     * @param <E>             type of the fifth translator argument
+     * @return {@code true} if the element was published, {@code false} if {@code retryStrategy} gave up
+     */
+    <A, B, C, D, E> boolean offerRetrying(EventTranslatorFiveArg<T, A, B, C, D, E> eventTranslator, A arg1, B arg2, C arg3, D arg4, E arg5, RetryStrategy retryStrategy);
 
     /**
      * Publishes at the tail by populating the slot's own element from five arguments, allocating nothing.

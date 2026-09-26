@@ -9,10 +9,15 @@ cut: the release workflow refuses to run without one, and the GitHub Release for
 with that section as its body. Write it in the commit that precedes the release, together with the
 matching `[x.y.z]:` link definition at the foot of the file.
 
-There is deliberately no `[Unreleased]` section, which is where Keep a Changelog would collect notes
-between releases. A section is written when the version it belongs to is being cut, so its heading
-carries the right number and date the first time and the workflow's check has exactly one heading it
-could mean.
+## [0.9.1] - 2026-09-26
+
+### Added
+
+- **Offers that can give up**: `RingBuffer.offerRetrying(...)`, one per `offerBlocking` overload,
+  waits for room like `offerBlocking` but stops when the `RetryStrategy` you pass says so, and then
+  returns `false` without storing anything. Use it when a producer must not wait forever, for
+  instance once the consumer has shut down. `RetryStrategy.idlingWhile(idleStrategy, keepTrying)`
+  covers the common case: wait on an idle strategy for as long as a condition holds.
 
 ## [0.9.0] - 2026-09-09
 
@@ -43,4 +48,5 @@ First public release.
 - All artifacts are signed, carry sources and javadoc, and are built reproducibly — the jars from a
   given tag are byte-identical to the published ones.
 
+[0.9.1]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.1
 [0.9.0]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.0

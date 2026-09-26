@@ -15,6 +15,7 @@
  */
 package org.lolaf.ringos.rb.testkit;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,6 +23,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.lolaf.ringos.idling.BackoffIdleStrategy;
 import org.lolaf.ringos.idling.IdleStrategy;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.RingBuffer;
 import org.lolaf.ringos.rb.RingBufferFactory.AccessType;
 
@@ -31,6 +33,8 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
@@ -231,6 +235,7 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
     private void produce(RingBuffer<Payload> buffer, int producerId, int perProducer,
                          OfferStyle offerStyle, Pacing pacing, long deadline) {
         IdleStrategy idleStrategy = new BackoffIdleStrategy();
+        RetryStrategy retryStrategy = RetryStrategy.idlingWhile(new BackoffIdleStrategy(), () -> System.nanoTime() < deadline);
         for (int sequence = 0; sequence < perProducer; sequence++) {
             long value = encode(producerId, sequence);
             switch (offerStyle) {
@@ -246,6 +251,11 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
                     break;
                 case OFFER_BLOCKING:
                     buffer.offerBlocking(new Payload(value), idleStrategy);
+                    break;
+                case TRANSLATOR_RETRYING:
+                    if (!buffer.offerRetrying(PUBLISH_VALUE, value, null, null, retryStrategy)) {
+                        throw new IllegalStateException("producer " + producerId + " could not publish before the run's deadline");
+                    }
                     break;
                 default:
                     throw new IllegalStateException("unhandled offer style " + offerStyle);
@@ -338,7 +348,7 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
             throw new IllegalArgumentException(
                     "this test runs " + accessType() + " buffers, not " + variant.getAccessType());
         }
-        if (offerStyle == OfferStyle.TRANSLATOR && !variant.isPooled()) {
+        if ((offerStyle == OfferStyle.TRANSLATOR || offerStyle == OfferStyle.TRANSLATOR_RETRYING) && !variant.isPooled()) {
             throw new IllegalArgumentException("a translator needs a pooled instance to populate");
         }
         if (variant.isPooled() && (pollStyle == PollStyle.POLL || pollStyle == PollStyle.POLL_BLOCKING)) {
@@ -414,6 +424,7 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
                 cases.add(Arguments.of(variant, OfferStyle.TRANSLATOR, PollStyle.POLL_CONSUMER, TIGHT_CAPACITY));
                 cases.add(Arguments.of(variant, OfferStyle.TRANSLATOR, PollStyle.BATCH, ROOMY_CAPACITY));
                 cases.add(Arguments.of(variant, OfferStyle.TRANSLATOR, PollStyle.DRAIN, TIGHT_CAPACITY));
+                cases.add(Arguments.of(variant, OfferStyle.TRANSLATOR_RETRYING, PollStyle.POLL_CONSUMER, TIGHT_CAPACITY));
             } else {
                 cases.add(Arguments.of(variant, OfferStyle.OFFER, PollStyle.POLL, TIGHT_CAPACITY));
                 cases.add(Arguments.of(variant, OfferStyle.OFFER, PollStyle.BATCH, ROOMY_CAPACITY));
@@ -453,6 +464,65 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
         runLoad(variant, TIGHT_CAPACITY, 2_000, offerStyle, pollStyle, Pacing.SLOW_CONSUMERS);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("retryingCases")
+    @Timeout(value = 120)
+    void survivesConsumersThatCannotKeepUpWithRetryingProducers(Variant variant) {
+        runLoad(variant, TIGHT_CAPACITY, 2_000, OfferStyle.TRANSLATOR_RETRYING, PollStyle.POLL_CONSUMER,
+                Pacing.SLOW_CONSUMERS);
+    }
+
+    /**
+     * Producers stuck on a full buffer with no consumer left must all return {@code false} once their strategy
+     * gives up, leaving the buffer as it was.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("retryingCases")
+    @Timeout(value = 120)
+    void retryingProducersAreReleasedWhenTheirStrategyGivesUp(Variant variant) {
+        RingBuffer<Payload> buffer = newBuffer(variant, TIGHT_CAPACITY, Payload::new);
+        for (int i = 0; i < TIGHT_CAPACITY; i++) {
+            assertThat(buffer.offer(PUBLISH_VALUE, (long) i, null, null)).isTrue();
+        }
+
+        AtomicBoolean keepTrying = new AtomicBoolean(true);
+        AtomicInteger retrying = new AtomicInteger();
+        AtomicInteger refused = new AtomicInteger();
+        AtomicReference<Throwable> firstFailure = new AtomicReference<>();
+        List<Thread> producers = new ArrayList<>();
+        for (int p = 0; p < producerCount(); p++) {
+            long value = TIGHT_CAPACITY + p;
+            producers.add(thread("producer-" + p, firstFailure, () -> {
+                RetryStrategy retryStrategy = RetryStrategy.idlingWhile(new BackoffIdleStrategy(), () -> {
+                    retrying.incrementAndGet();
+                    return keepTrying.get();
+                });
+                if (!buffer.offerRetrying(PUBLISH_VALUE, value, null, null, retryStrategy)) {
+                    refused.incrementAndGet();
+                }
+            }));
+        }
+        producers.forEach(Thread::start);
+
+        Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> retrying.get() >= producerCount());
+        keepTrying.set(false);
+
+        Awaitility.await().atMost(Duration.ofSeconds(5)).until(() -> refused.get() == producerCount());
+        joinAll(producers);
+        assertThat(firstFailure.get()).isNull();
+        assertThat(buffer.getSize()).isEqualTo(TIGHT_CAPACITY);
+        List<Long> values = new ArrayList<>();
+        buffer.drain(payload -> values.add(payload.value));
+        assertThat(values).containsExactly(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L);
+    }
+
+    /**
+     * @return the pooled shapes of the access type under test, which the retrying translator needs
+     */
+    protected Stream<Variant> retryingCases() {
+        return Variant.of(accessType()).filter(Variant::isPooled);
+    }
+
     /**
      * The mirror image: a buffer that spends the run empty, so consumers keep finding a slot whose element has
      * been claimed but not yet published.
@@ -479,7 +549,12 @@ public abstract class AbstractRingBufferConcurrencyTest extends AbstractRingBuff
         /**
          * {@link RingBuffer#offerBlocking(Object, IdleStrategy)}, idling rather than retrying by hand.
          */
-        OFFER_BLOCKING
+        OFFER_BLOCKING,
+        /**
+         * {@code RingBuffer.offerRetrying} through an {@code EventTranslator}, giving up at the run's deadline;
+         * pooled buffers only.
+         */
+        TRANSLATOR_RETRYING
     }
 
     /**

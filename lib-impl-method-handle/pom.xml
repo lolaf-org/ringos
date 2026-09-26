@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.lolaf.ringos</groupId>
         <artifactId>ringos-parent</artifactId>
-        <version>0.9.1-SNAPSHOT</version>
+        <version>0.9.1</version>
     </parent>
 
     <artifactId>ringos-lib-impl-method-handle</artifactId>

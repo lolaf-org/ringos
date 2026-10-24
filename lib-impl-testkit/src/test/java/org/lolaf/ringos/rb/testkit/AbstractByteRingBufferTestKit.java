@@ -44,7 +44,14 @@ public abstract class AbstractByteRingBufferTestKit {
      */
     protected abstract ByteRingBufferBuilder byteRingBufferBuilder();
 
+    /**
+     * Writes nothing into a payload shorter than {@link #MIN_PAYLOAD}: never past {@code length}, where the next
+     * frame's header lies.
+     */
     protected static void fill(ByteBuffer buffer, int index, int length, int producer, int sequence) {
+        if (length < MIN_PAYLOAD) {
+            return;
+        }
         buffer.putInt(index, producer);
         buffer.putInt(index + 4, sequence);
         for (int i = MIN_PAYLOAD; i < length; i++) {

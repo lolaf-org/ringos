@@ -41,10 +41,18 @@ class RingBufferBuilderProviderSelector {
      * @throws IllegalStateException if {@code candidates} is empty, or if none of them claims this runtime
      */
     static RingBufferBuilderProvider select(Iterable<RingBufferBuilderProvider> candidates) {
+        return select(candidates, RingBufferBuilderProvider.class);
+    }
+
+    /**
+     * @param service the kind of provider, named in the failures
+     * @see #select(Iterable)
+     */
+    static <P extends RingBufferBuilderProvider> P select(Iterable<P> candidates, Class<P> service) {
         List<String> seen = new ArrayList<>();
         List<String> eligible = new ArrayList<>();
-        RingBufferBuilderProvider chosen = null;
-        for (RingBufferBuilderProvider candidate : candidates) {
+        P chosen = null;
+        for (P candidate : candidates) {
             seen.add(candidate.getClass().getName());
             if (!candidate.isForCurrentRuntime()) {
                 continue;
@@ -57,16 +65,16 @@ class RingBufferBuilderProviderSelector {
             }
         }
         if (seen.isEmpty()) {
-            throw new IllegalStateException("Unable to find any RingBufferBuilderProvider SPI in classpath");
+            throw new IllegalStateException("Unable to find any " + service.getSimpleName() + " SPI in classpath");
         }
         if (chosen == null) {
-            throw new IllegalStateException("No RingBufferBuilder implementation matches the current runtime "
+            throw new IllegalStateException("No " + service.getSimpleName().replace("Provider", "") + " implementation matches the current runtime "
                     + "(Java " + Runtime.version().feature() + ", jdk.internal.misc opened: "
                     + Object.class.getModule().isOpen("jdk.internal.misc", RingBufferBuilderProviderSelector.class.getModule())
                     + "); candidates were " + seen);
         }
         if (eligible.size() > 1) {
-            log.debug("RingBufferBuilderProviders claiming this runtime: {}; kept {} on priority", eligible,
+            log.debug("{}s claiming this runtime: {}; kept {} on priority", service.getSimpleName(), eligible,
                     chosen.getClass().getName());
         }
         return chosen;

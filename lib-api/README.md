@@ -1,7 +1,7 @@
 # ringos-lib-api
 
-The ring buffers, the idle strategies that drive their polling loops, and the fast thread-local machinery around
-them.
+The ring buffers, byte ring buffers for variable-length frames, the idle strategies that drive their polling loops,
+and the fast thread-local machinery around them.
 
 ```xml
 <dependency>
@@ -167,6 +167,83 @@ Separately, `bufferPaddingEnabled` pads both ends of the backing arrays, keeping
 cache lines of whatever the allocator placed next to them. It defaults to the
 `org.lolaf.ringos.rb.RingBufferFactory.defaultBufferPaddingEnabled` system property, read once at class
 initialisation; the `build` overloads taking a `boolean` decide per buffer instead.
+
+---
+
+## Byte ring buffers
+
+A byte ring buffer holds variable-length frames back to back in one off-heap buffer: no slot sized for the
+largest message, no allocation per message. Each frame is a payload of bytes and an `int` type of yours (0 or
+more), handed back with it. Two kinds, both from `ByteRingBufferFactory`, both with a capacity in bytes that is a
+power of two of at least 1024:
+
+| | `queue(capacity)` | `broadcast(capacity, producers)` |
+|---|---|---|
+| Writers | any number of threads | one (`Producers.SINGLE`) or several (`Producers.MULTI`) |
+| Readers | one consumer | any number of independent readers |
+| When full | `write` returns `false` | the oldest frames are overwritten; a writer never waits |
+| A frame is gone | once read | once overwritten; a reader left behind is told |
+
+The longest payload is an eighth of the capacity, less a small header: `getMaxPayloadLength()` says exactly.
+
+### Writing
+
+Like the object ring buffers, write through a static translator and pass your state as its argument, so nothing
+is allocated:
+
+```java
+private static final ByteTranslator<Order> ENCODE = (buffer, index, length, order) -> {
+    buffer.putLong(index, order.id);
+    buffer.putLong(index + 8, order.price);
+};
+
+boolean written = queue.write(ORDER_TYPE, 16, ENCODE, order);
+```
+
+The translator gets the ring's own buffer and must write exactly `length` bytes at `index`, with absolute puts,
+leaving the buffer's position and limit alone: everything outside that range belongs to other frames.
+`write(type, src, srcIndex, length)` copies from a buffer of yours instead. A translator that throws leaves no frame
+behind.
+
+### Reading a queue
+
+```java
+int read = queue.read((type, buffer, index, length) -> handle(type, buffer, index, length), 64);
+```
+
+The handler sees the payload in place, and only during the call: its space is reused once the call returns.
+
+### Reading a broadcast buffer
+
+Each reader has its own position, starting at the tail when it is created. A writer may overwrite a frame while a
+reader copies it, so a reader copies the frame into a buffer of yours and only then checks it was not overwritten:
+a frame it reports is whole, a torn one never is.
+
+```java
+ByteRingReader reader = ring.newReader();
+ByteBuffer frame = ByteBuffer.allocateDirect(ring.getMaxPayloadLength());
+
+int length = reader.readInto(frame, 0);
+if (length == ByteRingReader.LAPPED) {
+    reader.seekToTail();              // or seek(position) to resume from a frame still in the buffer
+} else if (length != ByteRingReader.NO_FRAME) {
+    handle(reader.getType(), frame, length);   // a payload may be empty: 0 is a frame
+}
+```
+
+`LAPPED` means writers overwrote frames this reader had not read; it stays where it is until moved. Every frame has
+a position, the bytes written before it since the buffer was built: `write` returns it, `getFramePosition()` gives
+the last one read, and `seek(position)` resumes there as long as the frame is still in the buffer.
+
+**`Producers` is a contract, not a hint**: two threads writing a `SINGLE` buffer corrupt it silently. `MULTI`
+serializes writers behind a spin lock held for one frame copy, so a writer descheduled while holding it delays the
+other writers, never a reader.
+
+### Which implementation
+
+From Java 16 the factory picks an implementation copying frames with the JDK's bulk transfers, as fast as Agrona's
+on the benchmarks. On Java 11 to 15 it falls back to one that copies a few bytes at a time: correct, but several
+times slower on large frames. Neither needs JVM flags.
 
 ---
 

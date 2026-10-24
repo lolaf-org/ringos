@@ -179,7 +179,7 @@ power of two of at least 1024:
 
 | | `queue(capacity)` | `broadcast(capacity, producers)` |
 |---|---|---|
-| Writers | any number of threads | one (`Producers.SINGLE`) or several (`Producers.MULTI`) |
+| Writers | any number of threads | one (`ProducerType.SINGLE`) or several (`ProducerType.MULTI`) |
 | Readers | one consumer | any number of independent readers |
 | When full | `write` returns `false` | the oldest frames are overwritten; a writer never waits |
 | A frame is gone | once read | once overwritten; a reader left behind is told |
@@ -235,7 +235,7 @@ if (length == ByteRingReader.LAPPED) {
 a position, the bytes written before it since the buffer was built: `write` returns it, `getFramePosition()` gives
 the last one read, and `seek(position)` resumes there as long as the frame is still in the buffer.
 
-**`Producers` is a contract, not a hint**: two threads writing a `SINGLE` buffer corrupt it silently. `MULTI`
+**`ProducerType` is a contract, not a hint**: two threads writing a `SINGLE` buffer corrupt it silently. `MULTI`
 serializes writers behind a spin lock held for one frame copy, so a writer descheduled while holding it delays the
 other writers, never a reader.
 

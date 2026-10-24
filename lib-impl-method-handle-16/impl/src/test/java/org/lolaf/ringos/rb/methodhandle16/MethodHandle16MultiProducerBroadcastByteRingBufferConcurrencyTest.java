@@ -15,7 +15,7 @@
  */
 package org.lolaf.ringos.rb.methodhandle16;
 
-import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
+import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
 import org.lolaf.ringos.rb.testkit.AbstractBroadcastByteRingBufferConcurrencyTest;
 
@@ -27,7 +27,7 @@ class MethodHandle16MultiProducerBroadcastByteRingBufferConcurrencyTest extends 
     }
 
     @Override
-    protected Producers producers() {
-        return Producers.MULTI;
+    protected ProducerType producers() {
+        return ProducerType.MULTI;
     }
 }

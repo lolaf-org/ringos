@@ -21,6 +21,7 @@ import org.lolaf.ringos.rb.ByteRingBuffer;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
 import org.lolaf.ringos.rb.ByteRingReader;
 import org.lolaf.ringos.rb.ByteTranslator;
+import org.lolaf.ringos.rb.ProducerType;
 
 import java.nio.ByteBuffer;
 
@@ -57,7 +58,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
     }
 
     @Override
-    public BroadcastByteRingBuffer buildBroadcast(int capacity, BroadcastByteRingBuffer.Producers producers) {
+    public BroadcastByteRingBuffer buildBroadcast(int capacity, ProducerType producers) {
         return new Broadcast(capacity);
     }
 

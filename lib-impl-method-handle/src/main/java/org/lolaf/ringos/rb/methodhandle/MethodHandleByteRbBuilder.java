@@ -18,6 +18,7 @@ package org.lolaf.ringos.rb.methodhandle;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ByteRingBuffer;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
+import org.lolaf.ringos.rb.ProducerType;
 
 public class MethodHandleByteRbBuilder implements ByteRingBufferBuilder {
 
@@ -27,8 +28,8 @@ public class MethodHandleByteRbBuilder implements ByteRingBufferBuilder {
     }
 
     @Override
-    public BroadcastByteRingBuffer buildBroadcast(int capacity, BroadcastByteRingBuffer.Producers producers) {
-        return producers == BroadcastByteRingBuffer.Producers.SINGLE
+    public BroadcastByteRingBuffer buildBroadcast(int capacity, ProducerType producers) {
+        return producers == ProducerType.SINGLE
                 ? new MethodHandleSpBroadcastByteRingBuffer(capacity)
                 : new MethodHandleMpBroadcastByteRingBuffer(capacity);
     }

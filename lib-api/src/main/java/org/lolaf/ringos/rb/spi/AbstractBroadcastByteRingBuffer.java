@@ -25,7 +25,8 @@ import java.nio.ByteBuffer;
 
 /**
  * The protocol of a {@link BroadcastByteRingBuffer} with one writer at a time, after Agrona's
- * {@code BroadcastTransmitter}; {@link Producers#MULTI} implementations hold {@link #writeLock} around each write.
+ * {@code BroadcastTransmitter}; {@link org.lolaf.ringos.rb.ProducerType#MULTI} implementations hold
+ * {@link #writeLock} around each write.
  *
  * <p>A frame is a 16-byte header, the record length (header plus payload), the type and the frame's position, then
  * the payload, on a 16-byte boundary so a padding header always fits before the end. The writer first raises
@@ -51,7 +52,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Contended
     protected long tailIntent;
     /**
-     * Held by the writer of a {@link Producers#MULTI} buffer; unused otherwise.
+     * Held by the writer of a {@link org.lolaf.ringos.rb.ProducerType#MULTI} buffer; unused otherwise.
      */
     @Contended
     protected int writeLock;

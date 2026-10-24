@@ -22,6 +22,7 @@ import org.agrona.concurrent.broadcast.BroadcastTransmitter;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ByteRingBufferFactory;
 import org.lolaf.ringos.rb.ByteRingReader;
+import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.methodhandle.MethodHandleSpBroadcastByteRingBuffer;
 
 import java.nio.ByteBuffer;
@@ -40,7 +41,7 @@ public enum BroadcastImpl {
     RINGOS_SINGLE(false) {
         @Override
         Adapter create(int capacity, int payload) {
-            return ringos(ByteRingBufferFactory.broadcast(capacity, BroadcastByteRingBuffer.Producers.SINGLE), payload);
+            return ringos(ByteRingBufferFactory.broadcast(capacity, ProducerType.SINGLE), payload);
         }
     },
     /**
@@ -55,7 +56,7 @@ public enum BroadcastImpl {
     RINGOS_MULTI(true) {
         @Override
         Adapter create(int capacity, int payload) {
-            return ringos(ByteRingBufferFactory.broadcast(capacity, BroadcastByteRingBuffer.Producers.MULTI), payload);
+            return ringos(ByteRingBufferFactory.broadcast(capacity, ProducerType.MULTI), payload);
         }
     },
     AGRONA(false) {

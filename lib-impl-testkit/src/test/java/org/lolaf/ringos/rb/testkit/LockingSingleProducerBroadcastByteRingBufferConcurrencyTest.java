@@ -15,7 +15,7 @@
  */
 package org.lolaf.ringos.rb.testkit;
 
-import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
+import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
 
 /**
@@ -29,7 +29,7 @@ class LockingSingleProducerBroadcastByteRingBufferConcurrencyTest extends Abstra
     }
 
     @Override
-    protected Producers producers() {
-        return Producers.SINGLE;
+    protected ProducerType producers() {
+        return ProducerType.SINGLE;
     }
 }

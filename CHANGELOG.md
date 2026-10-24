@@ -16,12 +16,15 @@ matching `[x.y.z]:` link definition at the foot of the file.
 - **Byte ring buffers**: variable-length frames of bytes in one off-heap buffer, written and read without
   allocating, from `ByteRingBufferFactory`.
   - `queue(capacity)`: any number of writer threads, one reader. A full queue refuses a write.
-  - `broadcast(capacity, producers)`: one writer thread (`Producers.SINGLE`) or several (`Producers.MULTI`), and
+  - `broadcast(capacity, producers)`: one writer thread (`ProducerType.SINGLE`) or several (`ProducerType.MULTI`), and
     any number of independent readers. A write never waits: the oldest frames are overwritten, and a reader left
     behind is told it was lapped instead of being handed a damaged frame. Readers can resume from a saved
     position.
   - On Java 16 and later the frames are copied as fast as Agrona's equivalents; on Java 11 to 15 large frames are
     several times slower. No JVM flags are needed.
+- **`ProducerType`** (`SINGLE`, `MULTI`) says who may write to a buffer: it is what you pass to
+  `ByteRingBufferFactory.broadcast`, and `RingBufferFactory.AccessType.getProducerType()` gives the producer half of an
+  access type.
 - **New runtime artifact** `ringos-lib-impl-method-handle-16-provider`, part of `ringos-lib-impl-all`, so nothing
   changes for applications depending on the aggregator.
 

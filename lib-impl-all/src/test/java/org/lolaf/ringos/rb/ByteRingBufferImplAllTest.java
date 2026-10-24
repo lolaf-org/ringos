@@ -48,8 +48,8 @@ class ByteRingBufferImplAllTest {
 
     @Test
     void theFactoryBuildsBothBroadcastModes() {
-        BroadcastByteRingBuffer single = ByteRingBufferFactory.broadcast(1024, BroadcastByteRingBuffer.Producers.SINGLE);
-        BroadcastByteRingBuffer multi = ByteRingBufferFactory.broadcast(1024, BroadcastByteRingBuffer.Producers.MULTI);
+        BroadcastByteRingBuffer single = ByteRingBufferFactory.broadcast(1024, ProducerType.SINGLE);
+        BroadcastByteRingBuffer multi = ByteRingBufferFactory.broadcast(1024, ProducerType.MULTI);
         ByteRingReader reader = single.newReader();
 
         long position = single.write(3, 8, (buffer, index, length, arg) -> buffer.putLong(index, arg), 42L);

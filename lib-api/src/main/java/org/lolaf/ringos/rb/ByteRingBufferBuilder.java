@@ -29,5 +29,5 @@ public interface ByteRingBufferBuilder {
     /**
      * @param capacity in bytes, already checked by the factory
      */
-    BroadcastByteRingBuffer buildBroadcast(int capacity, BroadcastByteRingBuffer.Producers producers);
+    BroadcastByteRingBuffer buildBroadcast(int capacity, ProducerType producers);
 }

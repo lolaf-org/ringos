@@ -15,7 +15,7 @@
  */
 package org.lolaf.ringos.rb.methodhandle;
 
-import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
+import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
 import org.lolaf.ringos.rb.testkit.AbstractBroadcastByteRingBufferContractTest;
 
@@ -27,7 +27,7 @@ class MethodHandleMultiProducerBroadcastByteRingBufferContractTest extends Abstr
     }
 
     @Override
-    protected Producers producers() {
-        return Producers.MULTI;
+    protected ProducerType producers() {
+        return ProducerType.MULTI;
     }
 }

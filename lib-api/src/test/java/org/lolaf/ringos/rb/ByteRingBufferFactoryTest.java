@@ -36,7 +36,7 @@ class ByteRingBufferFactoryTest {
         assertThatThrownBy(() -> ByteRingBufferFactory.queue(capacity))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Capacity must be a power of two of at least 1024 bytes, got " + capacity);
-        assertThatThrownBy(() -> ByteRingBufferFactory.broadcast(capacity, BroadcastByteRingBuffer.Producers.MULTI))
+        assertThatThrownBy(() -> ByteRingBufferFactory.broadcast(capacity, ProducerType.MULTI))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

@@ -18,7 +18,7 @@ package org.lolaf.ringos.rb.testkit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
-import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
+import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingReader;
 
 import java.nio.ByteBuffer;
@@ -37,8 +37,9 @@ import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.
 import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.startAndAwait;
 
 /**
- * Producers, as many as the {@link Producers} mode allows, and several readers of a {@link BroadcastByteRingBuffer}. A reader is never handed a torn frame,
- * never sees a producer's frames out of order, and is told when it was lapped; one that keeps up loses nothing.
+ * Producers, as many as the {@link ProducerType} allows, and several readers of a {@link BroadcastByteRingBuffer}. A
+ * reader is never handed a torn frame, never sees a producer's frames out of order, and is told when it was lapped;
+ * one that keeps up loses nothing.
  */
 public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends AbstractByteRingBufferTestKit {
 
@@ -47,10 +48,10 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
      */
     private static final int MAX_PAYLOAD = 96;
 
-    protected abstract Producers producers();
+    protected abstract ProducerType producers();
 
     private int producerCount() {
-        return producers() == Producers.SINGLE ? 1 : severalThreads();
+        return producers() == ProducerType.SINGLE ? 1 : severalThreads();
     }
 
     /**

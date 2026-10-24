@@ -32,6 +32,12 @@ public interface ByteRingReader {
     int LAPPED = -1;
 
     /**
+     * Returned by {@link #readInto} when no frame was published past this reader's position; told apart from a
+     * frame with an empty payload, whose length is 0.
+     */
+    int NO_FRAME = -2;
+
+    /**
      * The position of the next frame to read.
      */
     long getPosition();
@@ -39,8 +45,9 @@ public interface ByteRingReader {
     /**
      * Copies the next frame's payload into {@code dst} at {@code dstIndex} and moves past it.
      *
-     * @return the payload length, 0 when no frame was published since, or {@link #LAPPED}, after which the reader
-     * stays where it is until {@link #seek} or {@link #seekToTail} moves it; what {@code dst} holds is then garbage
+     * @return the payload length, {@link #NO_FRAME} when no frame was published since, or {@link #LAPPED}, after
+     * which the reader stays where it is until {@link #seek} or {@link #seekToTail} moves it; what {@code dst} holds
+     * is then garbage
      * @throws IllegalArgumentException if {@code dst} has fewer than the frame's bytes after {@code dstIndex}; sizing
      *                                  it to the ring's maximum payload rules this out
      */

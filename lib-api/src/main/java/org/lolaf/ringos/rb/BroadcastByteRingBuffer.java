@@ -23,7 +23,7 @@ import java.nio.ByteBuffer;
  *
  * <p>A write never waits: when the buffer is full it overwrites the oldest frames, and a reader that falls a whole
  * capacity behind is told it was lapped. So a slow reader can never stall a producer. A frame takes its payload
- * plus a 16-byte header, rounded up to 8 bytes. Neither side allocates.
+ * plus a 16-byte header, rounded up to 16 bytes. Neither side allocates.
  *
  * <p>Every frame has a position: the count of bytes written before it since the buffer was built. A position
  * stays valid as long as the frame is in the buffer, so a reader can resume from one.

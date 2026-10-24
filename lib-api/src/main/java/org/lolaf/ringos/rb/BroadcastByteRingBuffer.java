@@ -18,8 +18,8 @@ package org.lolaf.ringos.rb;
 import java.nio.ByteBuffer;
 
 /**
- * Variable-length frames in one off-heap buffer, written by any number of producers and read by any number of
- * independent {@link ByteRingReader}s.
+ * Variable-length frames in one off-heap buffer, written by one producer or several, as {@link Producers} says, and
+ * read by any number of independent {@link ByteRingReader}s.
  *
  * <p>A write never waits: when the buffer is full it overwrites the oldest frames, and a reader that falls a whole
  * capacity behind is told it was lapped. So a slow reader can never stall a producer. A frame takes its payload
@@ -63,4 +63,20 @@ public interface BroadcastByteRingBuffer {
      * A reader positioned at the tail, so it reads the frames published from now on.
      */
     ByteRingReader newReader();
+
+    /**
+     * Who may write. <b>A contract, not a hint</b>: two threads writing a {@link #SINGLE} buffer corrupt it silently.
+     */
+    enum Producers {
+        /**
+         * One thread writes, so nothing coordinates the writes. The fastest.
+         */
+        SINGLE,
+        /**
+         * Any number of threads write, one at a time behind a spin lock held for the copy of one frame. A writer
+         * descheduled while holding it delays the other writers, never a reader. Lock-free claiming was ruled out: a
+         * descheduled writer could be lapped by the others and then write over a newer frame that readers accept.
+         */
+        MULTI
+    }
 }

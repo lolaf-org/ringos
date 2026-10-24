@@ -57,7 +57,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
     }
 
     @Override
-    public BroadcastByteRingBuffer buildBroadcast(int capacity) {
+    public BroadcastByteRingBuffer buildBroadcast(int capacity, BroadcastByteRingBuffer.Producers producers) {
         return new Broadcast(capacity);
     }
 

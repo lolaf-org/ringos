@@ -13,17 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.lolaf.ringos.rb.testkit;
+package org.lolaf.ringos.rb.methodhandle;
 
+import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
 import org.lolaf.ringos.rb.ByteRingBufferBuilder;
+import org.lolaf.ringos.rb.testkit.AbstractBroadcastByteRingBufferConcurrencyTest;
 
-/**
- * Runs the kit against the locking reference, which proves the tests rather than an implementation.
- */
-class LockingBroadcastByteRingBufferContractTest extends AbstractBroadcastByteRingBufferContractTest {
+class MethodHandleSingleProducerBroadcastByteRingBufferConcurrencyTest extends AbstractBroadcastByteRingBufferConcurrencyTest {
 
     @Override
     protected ByteRingBufferBuilder byteRingBufferBuilder() {
-        return new LockingByteRingBufferBuilder();
+        return new MethodHandleByteRbBuilder();
+    }
+
+    @Override
+    protected Producers producers() {
+        return Producers.SINGLE;
     }
 }

@@ -18,6 +18,7 @@ package org.lolaf.ringos.rb.testkit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
+import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
 import org.lolaf.ringos.rb.ByteRingReader;
 
 import java.nio.ByteBuffer;
@@ -36,7 +37,7 @@ import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.
 import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.startAndAwait;
 
 /**
- * Several producers and several readers of a {@link BroadcastByteRingBuffer}. A reader is never handed a torn frame,
+ * Producers, as many as the {@link Producers} mode allows, and several readers of a {@link BroadcastByteRingBuffer}. A reader is never handed a torn frame,
  * never sees a producer's frames out of order, and is told when it was lapped; one that keeps up loses nothing.
  */
 public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends AbstractByteRingBufferTestKit {
@@ -46,6 +47,12 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
      */
     private static final int MAX_PAYLOAD = 96;
 
+    protected abstract Producers producers();
+
+    private int producerCount() {
+        return producers() == Producers.SINGLE ? 1 : severalThreads();
+    }
+
     /**
      * Room for everything the producers write, so no reader can be lapped.
      */
@@ -53,8 +60,8 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
     @Timeout(120)
     void readersThatAreNeverLappedGetEveryFrameInEachProducersOrder() throws InterruptedException {
         int framesPerProducer = 5_000;
-        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1 << 22);
-        int producers = severalThreads();
+        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1 << 22, producers());
+        int producers = producerCount();
         List<ReaderRun> readers = List.of(new ReaderRun(ring, producers, 0), new ReaderRun(ring, producers, 0),
                 new ReaderRun(ring, producers, 0));
 
@@ -74,8 +81,8 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
     @Test
     @Timeout(120)
     void aLappedReaderIsToldAndNeverHandedATornFrame() throws InterruptedException {
-        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1024);
-        int producers = severalThreads();
+        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1024, producers());
+        int producers = producerCount();
         ReaderRun fast = new ReaderRun(ring, producers, 0);
         ReaderRun slow = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50));
 

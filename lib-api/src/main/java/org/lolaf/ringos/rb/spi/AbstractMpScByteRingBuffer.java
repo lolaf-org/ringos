@@ -226,7 +226,7 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
         return (length + ALIGNMENT - 1) & -ALIGNMENT;
     }
 
-    protected static void checkFrame(int type, int length, int maxPayloadLength) {
+    static void checkFrame(int type, int length, int maxPayloadLength) {
         if (type < 0) {
             throw new IllegalArgumentException("Type must be at least 0, got " + type);
         }

@@ -46,9 +46,9 @@ public class ByteRingBufferFactory {
      * @param capacity in bytes, a power of two of at least {@link #MIN_CAPACITY}
      * @throws IllegalArgumentException for any other capacity
      */
-    public static BroadcastByteRingBuffer broadcast(int capacity) {
+    public static BroadcastByteRingBuffer broadcast(int capacity, BroadcastByteRingBuffer.Producers producers) {
         checkCapacity(capacity);
-        return Builder.INSTANCE.buildBroadcast(capacity);
+        return Builder.INSTANCE.buildBroadcast(capacity, producers);
     }
 
     static int checkCapacity(int capacity) {

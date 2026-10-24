@@ -17,6 +17,7 @@ package org.lolaf.ringos.rb;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,5 +42,19 @@ class ByteRingBufferImplAllTest {
 
         assertThat(types).containsExactly(7);
         assertThat(queue.getClass().getSimpleName()).isEqualTo("MethodHandleMpScByteRingBuffer");
+    }
+
+    @Test
+    void theFactoryBuildsBothBroadcastModes() {
+        BroadcastByteRingBuffer single = ByteRingBufferFactory.broadcast(1024, BroadcastByteRingBuffer.Producers.SINGLE);
+        BroadcastByteRingBuffer multi = ByteRingBufferFactory.broadcast(1024, BroadcastByteRingBuffer.Producers.MULTI);
+        ByteRingReader reader = single.newReader();
+
+        long position = single.write(3, 8, (buffer, index, length, arg) -> buffer.putLong(index, arg), 42L);
+
+        assertThat(reader.readInto(ByteBuffer.allocate(8), 0)).isEqualTo(8);
+        assertThat(reader.getFramePosition()).isEqualTo(position);
+        assertThat(single.getClass().getSimpleName()).isEqualTo("MethodHandleSpBroadcastByteRingBuffer");
+        assertThat(multi.getClass().getSimpleName()).isEqualTo("MethodHandleMpBroadcastByteRingBuffer");
     }
 }

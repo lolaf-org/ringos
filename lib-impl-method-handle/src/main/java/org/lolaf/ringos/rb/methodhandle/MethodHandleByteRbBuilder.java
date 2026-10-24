@@ -27,7 +27,9 @@ public class MethodHandleByteRbBuilder implements ByteRingBufferBuilder {
     }
 
     @Override
-    public BroadcastByteRingBuffer buildBroadcast(int capacity) {
-        throw new UnsupportedOperationException("Broadcast byte ring buffers are not implemented yet");
+    public BroadcastByteRingBuffer buildBroadcast(int capacity, BroadcastByteRingBuffer.Producers producers) {
+        return producers == BroadcastByteRingBuffer.Producers.SINGLE
+                ? new MethodHandleSpBroadcastByteRingBuffer(capacity)
+                : new MethodHandleMpBroadcastByteRingBuffer(capacity);
     }
 }

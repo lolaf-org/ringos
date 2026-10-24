@@ -17,6 +17,7 @@ package org.lolaf.ringos.rb.testkit;
 
 import org.junit.jupiter.api.Test;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
+import org.lolaf.ringos.rb.BroadcastByteRingBuffer.Producers;
 import org.lolaf.ringos.rb.ByteRingReader;
 
 import java.nio.ByteBuffer;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * What one thread can expect of a {@link BroadcastByteRingBuffer} and its readers: positions, overwriting, being
- * lapped and resuming.
+ * lapped and resuming. Run once per {@link Producers} mode.
  */
 public abstract class AbstractBroadcastByteRingBufferContractTest extends AbstractByteRingBufferTestKit {
 
@@ -37,8 +38,10 @@ public abstract class AbstractBroadcastByteRingBufferContractTest extends Abstra
     private final Frame frame = new Frame();
     private final ByteBuffer dst = ByteBuffer.allocate(CAPACITY);
 
+    protected abstract Producers producers();
+
     private BroadcastByteRingBuffer ring() {
-        return byteRingBufferBuilder().buildBroadcast(CAPACITY);
+        return byteRingBufferBuilder().buildBroadcast(CAPACITY, producers());
     }
 
     private long write(BroadcastByteRingBuffer ring, int sequence, int length) {

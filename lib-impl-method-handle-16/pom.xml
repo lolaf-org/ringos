@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-parent</artifactId>
+        <version>0.9.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-lib-impl-method-handle-16</artifactId>
+
+    <name>Ringos Byte Ring Buffer Implementation (VarHandle, JDK 16+)</name>
+    <packaging>pom</packaging>
+
+    <description>
+        The VarHandle byte ring buffers with the absolute bulk ByteBuffer copy of Java 16, split like the JDK 25
+        unsafe operations: "impl" in Java 16 bytecode, "provider" in Java 11 bytecode so it loads on any JDK and
+        selects the implementation from 16 on.
+    </description>
+
+    <modules>
+        <module>impl</module>
+        <module>provider</module>
+    </modules>
+</project>

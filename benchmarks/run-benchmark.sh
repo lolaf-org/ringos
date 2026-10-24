@@ -4,7 +4,7 @@ if [ -n "$JAVA_HOME" ]; then
 else
   JAVA="java"
 fi
-for BENCHMARK in SpScRingBufferBenchmark MpScRingBufferBenchmark MpMcRingBufferBenchmark; do
+for BENCHMARK in SpScRingBufferBenchmark MpScRingBufferBenchmark MpMcRingBufferBenchmark ByteRingBufferBenchmark BroadcastByteRingBufferBenchmark; do
   "$JAVA" -jar target/benchmarks.jar -rf json -prof gc "$BENCHMARK"
   mv jmh-result.json "results/jmh-result-${BENCHMARK}-${DATE}.json"
 done

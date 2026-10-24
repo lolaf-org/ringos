@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.lolaf.ringos</groupId>
+        <artifactId>ringos-lib-impl-method-handle-16</artifactId>
+        <version>0.9.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ringos-lib-impl-method-handle-16-provider</artifactId>
+
+    <name>Ringos Byte Ring Buffer Implementation (VarHandle, JDK 16+ Provider)</name>
+    <description>
+        Always-loadable provider, in Java 11 bytecode, selecting the JDK 16+ byte ring buffers. The artifact to depend
+        on; it brings the implementation at runtime.
+    </description>
+
+    <properties>
+        <license.source.dir>${project.basedir}/../..</license.source.dir>
+        <maven.compiler.release>11</maven.compiler.release>
+        <automatic.module.name>org.lolaf.ringos.rb.methodhandle16.provider</automatic.module.name>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Runtime only: the provider names the Java 16 implementation by string, so it must never link it. -->
+        <dependency>
+            <groupId>org.lolaf.ringos</groupId>
+            <artifactId>ringos-lib-impl-method-handle-16-impl</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</project>

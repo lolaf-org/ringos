@@ -112,7 +112,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     public long write(int type, ByteBuffer src, int srcIndex, int length) {
         AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
         long position = begin(type, length);
-        AbstractMpScByteRingBuffer.copy(src, srcIndex, buffer, index(position) + HEADER, length);
+        copyIn(src, srcIndex, index(position) + HEADER, length);
         end(position, length);
         return position;
     }
@@ -147,6 +147,20 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         setIntPlain(index, record);
         setIntPlain(index + TYPE_OFFSET, type);
         setLongPlain(index + POSITION_OFFSET, position);
+    }
+
+    /**
+     * Copies a payload into the buffer. Overridden by an implementation with a faster copy than Java 11 allows.
+     */
+    protected void copyIn(ByteBuffer src, int srcIndex, int index, int length) {
+        AbstractMpScByteRingBuffer.copy(src, srcIndex, buffer, index, length);
+    }
+
+    /**
+     * Copies a payload out of the buffer, for a reader. Overridden like {@link #copyIn}.
+     */
+    protected void copyOut(int index, ByteBuffer dst, int dstIndex, int length) {
+        AbstractMpScByteRingBuffer.copy(buffer, index, dst, dstIndex, length);
     }
 
     @Override
@@ -220,7 +234,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
                     }
                     throw new IllegalArgumentException("Frame of " + length + " bytes, room for " + (dst.limit() - dstIndex));
                 }
-                AbstractMpScByteRingBuffer.copy(buffer, index + HEADER, dst, dstIndex, length);
+                copyOut(index + HEADER, dst, dstIndex, length);
                 if (overwritten(position)) {
                     return LAPPED;
                 }

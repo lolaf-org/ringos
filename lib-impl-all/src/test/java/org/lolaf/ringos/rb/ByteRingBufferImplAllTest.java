@@ -24,10 +24,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * With every implementation on the classpath, {@link ByteRingBufferFactory} finds a byte ring buffer builder on any
- * runtime, flags or not: the VarHandle one is the only one so far.
+ * With every implementation on the classpath, {@link ByteRingBufferFactory} picks the JDK 16+ byte ring buffers from
+ * Java 16 on, and the Java 11 ones below it, flags or not.
  */
 class ByteRingBufferImplAllTest {
+
+    private static final String PREFIX = Runtime.version().feature() >= 16 ? "MethodHandle16" : "MethodHandle";
 
     @Test
     void theFactoryBuildsAWorkingQueue() {
@@ -41,7 +43,7 @@ class ByteRingBufferImplAllTest {
         }, 1);
 
         assertThat(types).containsExactly(7);
-        assertThat(queue.getClass().getSimpleName()).isEqualTo("MethodHandleMpScByteRingBuffer");
+        assertThat(queue.getClass().getSimpleName()).isEqualTo(PREFIX + "MpScByteRingBuffer");
     }
 
     @Test
@@ -54,7 +56,7 @@ class ByteRingBufferImplAllTest {
 
         assertThat(reader.readInto(ByteBuffer.allocate(8), 0)).isEqualTo(8);
         assertThat(reader.getFramePosition()).isEqualTo(position);
-        assertThat(single.getClass().getSimpleName()).isEqualTo("MethodHandleSpBroadcastByteRingBuffer");
-        assertThat(multi.getClass().getSimpleName()).isEqualTo("MethodHandleMpBroadcastByteRingBuffer");
+        assertThat(single.getClass().getSimpleName()).isEqualTo(PREFIX + "SpBroadcastByteRingBuffer");
+        assertThat(multi.getClass().getSimpleName()).isEqualTo(PREFIX + "MpBroadcastByteRingBuffer");
     }
 }

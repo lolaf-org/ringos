@@ -20,7 +20,10 @@ import org.lolaf.ringos.rb.ByteFrameHandler;
 import org.lolaf.ringos.rb.ByteRingBuffer;
 import org.lolaf.ringos.rb.ByteTranslator;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * The claim protocol of a multi-producer, single-consumer {@link ByteRingBuffer}, after Agrona's
@@ -42,6 +45,11 @@ import java.nio.ByteBuffer;
  * caller's, written and read through the buffer in its own order.
  */
 public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
+
+    /**
+     * Plain access only, which tolerates any alignment.
+     */
+    private static final VarHandle LONG = MethodHandles.byteBufferViewVarHandle(long[].class, ByteOrder.nativeOrder());
 
     public static final int HEADER = 8;
     public static final int ALIGNMENT = 8;
@@ -132,7 +140,7 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
         if (index < 0) {
             return false;
         }
-        copy(src, srcIndex, buffer, index + HEADER, length);
+        copyIn(src, srcIndex, index + HEADER, length);
         setLengthRelease(index, HEADER + length);
         return true;
     }
@@ -216,9 +224,19 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
         return (int) (getTailVolatile() - getHeadAcquire());
     }
 
-    private void zero(int index, int frame) {
+    /**
+     * Copies a payload into the buffer. Overridden by an implementation with a faster copy than Java 11 allows.
+     */
+    protected void copyIn(ByteBuffer src, int srcIndex, int index, int length) {
+        copy(src, srcIndex, buffer, index, length);
+    }
+
+    /**
+     * Zeroes a consumed frame, whose length is a multiple of 8. Overridden by an implementation with a faster fill.
+     */
+    protected void zero(int index, int frame) {
         for (int i = 0; i < frame; i += Long.BYTES) {
-            buffer.putLong(index + i, 0L);
+            LONG.set(buffer, index + i, 0L);
         }
     }
 
@@ -236,15 +254,13 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
     }
 
     /**
-     * Copies without touching either buffer's position, which an absolute bulk copy cannot do before Java 16; by longs
-     * only when both buffers read them in the same byte order.
+     * Copies without touching either buffer's position, which an absolute bulk copy cannot do before Java 16. By longs
+     * read and written in native order, whatever order the buffers say: bytes come out as they went in, unswapped.
      */
     protected static void copy(ByteBuffer src, int srcIndex, ByteBuffer dst, int dstIndex, int length) {
         int i = 0;
-        if (src.order() == dst.order()) {
-            for (; i + Long.BYTES <= length; i += Long.BYTES) {
-                dst.putLong(dstIndex + i, src.getLong(srcIndex + i));
-            }
+        for (; i + Long.BYTES <= length; i += Long.BYTES) {
+            LONG.set(dst, dstIndex + i, (long) LONG.get(src, srcIndex + i));
         }
         for (; i < length; i++) {
             dst.put(dstIndex + i, src.get(srcIndex + i));

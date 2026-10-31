@@ -19,7 +19,8 @@ matching `[x.y.z]:` link definition at the foot of the file.
   - `broadcast(capacity, producers)`: one writer thread (`ProducerType.SINGLE`) or several (`ProducerType.MULTI`), and
     any number of independent readers. A write never waits: the oldest frames are overwritten, and a reader left
     behind is told it was lapped instead of being handed a damaged frame. Readers can resume from a saved
-    position.
+    position, and can fill a buffer with as many frames as fit: a frame too large for the room left is reported and
+    left for the next read.
   - On Java 16 and later the frames are copied as fast as Agrona's equivalents; on Java 11 to 15 large frames are
     several times slower. No JVM flags are needed.
 - **`ProducerType`** (`SINGLE`, `MULTI`) says who may write to a buffer: it is what you pass to

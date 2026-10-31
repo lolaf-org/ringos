@@ -120,14 +120,30 @@ public abstract class AbstractBroadcastByteRingBufferContractTest extends Abstra
     }
 
     @Test
-    void aDestinationTooSmallIsRefusedAndTheReaderStays() {
+    void aFrameLargerThanTheRoomLeftIsNotReadAndTheReaderStays() {
         BroadcastByteRingBuffer ring = ring();
         ByteRingReader reader = ring.newReader();
         long position = write(ring, 1, 40);
 
-        assertThatThrownBy(() -> reader.readInto(ByteBuffer.allocate(39), 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(reader.readInto(ByteBuffer.allocate(139), 100)).isEqualTo(ByteRingReader.NO_ROOM);
         assertThat(reader.getPosition()).isEqualTo(position);
         assertReads(reader, 1, 40, position);
+    }
+
+    @Test
+    void framesFillABufferUntilTheNextOneDoesNotFit() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        write(ring, 1, 30);
+        write(ring, 2, 30);
+        long third = write(ring, 3, 30);
+        ByteBuffer batch = ByteBuffer.allocate(70);
+
+        assertThat(reader.readInto(batch, 0)).isEqualTo(30);
+        assertThat(reader.readInto(batch, 30)).isEqualTo(30);
+        assertThat(reader.readInto(batch, 60)).isEqualTo(ByteRingReader.NO_ROOM);
+        assertThat(intact(batch, 0, 30) && intact(batch, 30, 30)).isTrue();
+        assertReads(reader, 3, 30, third);
     }
 
     @Test

@@ -241,7 +241,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
                         continue;
                     }
                     if (dst.limit() - dstIndex < length) {
-                        throw new IllegalArgumentException("Frame of " + length + " bytes, room for " + (dst.limit() - dstIndex));
+                        return NO_ROOM;
                     }
                     copy(ring.buffer, index + Broadcast.HEADER, dst, dstIndex, length);
                     type = frameType;

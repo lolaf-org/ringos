@@ -230,10 +230,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
                 }
                 int length = record - HEADER;
                 if (dst.limit() - dstIndex < length) {
-                    if (overwritten(position)) {
-                        return LAPPED;
-                    }
-                    throw new IllegalArgumentException("Frame of " + length + " bytes, room for " + (dst.limit() - dstIndex));
+                    return overwritten(position) ? LAPPED : NO_ROOM;
                 }
                 copyOut(index + HEADER, dst, dstIndex, length);
                 if (overwritten(position)) {

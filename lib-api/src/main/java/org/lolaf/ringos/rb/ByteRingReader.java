@@ -38,6 +38,12 @@ public interface ByteRingReader {
     int NO_FRAME = -2;
 
     /**
+     * Returned by {@link #readInto} when the next frame is larger than the room left in {@code dst}: the reader stays
+     * on it, so a caller filling a buffer with frames stops there and reads it into the next one.
+     */
+    int NO_ROOM = -3;
+
+    /**
      * The position of the next frame to read.
      */
     long getPosition();
@@ -45,11 +51,9 @@ public interface ByteRingReader {
     /**
      * Copies the next frame's payload into {@code dst} at {@code dstIndex} and moves past it.
      *
-     * @return the payload length, {@link #NO_FRAME} when no frame was published since, or {@link #LAPPED}, after
-     * which the reader stays where it is until {@link #seek} or {@link #seekToTail} moves it; what {@code dst} holds
-     * is then garbage
-     * @throws IllegalArgumentException if {@code dst} has fewer than the frame's bytes after {@code dstIndex}; sizing
-     *                                  it to the ring's maximum payload rules this out
+     * @return the payload length, {@link #NO_FRAME} when no frame was published since, {@link #NO_ROOM} when it does
+     * not fit after {@code dstIndex}, or {@link #LAPPED}, after which the reader stays where it is until {@link #seek}
+     * or {@link #seekToTail} moves it; what {@code dst} holds is then garbage
      */
     int readInto(ByteBuffer dst, int dstIndex);
 

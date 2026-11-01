@@ -297,7 +297,10 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         private int type;
         private long framePosition = -1;
         private boolean frameToUnread;
-        private AtomicLong gate;
+        /**
+         * Nulled by {@link #close()} from any thread, so read once per use.
+         */
+        private volatile AtomicLong gate;
 
         Reader(long position, AtomicLong gate) {
             this.position = position;
@@ -348,9 +351,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
                 type = frameType;
                 framePosition = position;
                 frameToUnread = true;
-                if (gate != null) {
-                    gate.setRelease(position);
-                }
+                publishGate(position);
                 position += align(record);
                 return length;
             }
@@ -368,7 +369,8 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
 
         @Override
         public boolean seek(long target) {
-            if (gate == null || target >= gate.get()) {
+            AtomicLong current = gate;
+            if (current == null || target >= current.get()) {
                 return moveTo(target);
             }
             lockWriters();
@@ -396,9 +398,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
             }
             position = target;
             frameToUnread = false;
-            if (gate != null) {
-                gate.setRelease(target);
-            }
+            publishGate(target);
             return true;
         }
 
@@ -406,9 +406,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         public void seekToTail() {
             position = getTailAcquire();
             frameToUnread = false;
-            if (gate != null) {
-                gate.setRelease(position);
-            }
+            publishGate(position);
         }
 
         @Override
@@ -423,9 +421,17 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
 
         @Override
         public void close() {
-            if (gate != null) {
-                removeGate(gate);
+            AtomicLong current = gate;
+            if (current != null) {
                 gate = null;
+                removeGate(current);
+            }
+        }
+
+        private void publishGate(long first) {
+            AtomicLong current = gate;
+            if (current != null) {
+                current.setRelease(first);
             }
         }
 

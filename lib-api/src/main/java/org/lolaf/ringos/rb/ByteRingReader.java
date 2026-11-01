@@ -92,7 +92,8 @@ public interface ByteRingReader {
 
     /**
      * Stops gating writers, for a reader from {@link BroadcastByteRingBuffer#newGatingReader()}; nothing for another.
-     * The reader can still read, and be lapped.
+     * The reader can still read, and be lapped. Any thread, unlike the other methods, so a writer's thread can drop a
+     * reader that holds it back.
      */
     void close();
 }

@@ -120,6 +120,48 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         assertThat(plain.failure.get()).isNull();
     }
 
+    /**
+     * A writer held back drops the slow gating reader by closing it from its own thread while the reader goes on
+     * reading: the writes go through, and the reader, lapped from then on, never fails.
+     */
+    @Test
+    @Timeout(60)
+    void aGatingReaderClosedFromAWriterThreadStopsHoldingWritesBack() throws InterruptedException {
+        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1024, producers());
+        ReaderRun gating = new ReaderRun(ring, 1, TimeUnit.MILLISECONDS.toNanos(5), true);
+        AtomicBoolean producerDone = new AtomicBoolean();
+        AtomicReference<Throwable> readerFailure = new AtomicReference<>();
+        Thread reader = new Thread(() -> {
+            try {
+                gating.run(producerDone);
+            } catch (Throwable e) {
+                readerFailure.set(e);
+            }
+        }, "reader");
+        RetryStrategy dropReader = new RetryStrategy() {
+            @Override
+            public void reset() {
+            }
+
+            @Override
+            public boolean awaitRetry() {
+                gating.reader.close();
+                return true;
+            }
+        };
+        reader.start();
+        Frame frame = new Frame();
+        for (int sequence = 0; sequence < 10_000; sequence++) {
+            assertThat(ring.writeRetrying(0, payloadLength(0, sequence, MAX_PAYLOAD), FILL, frame.of(0, sequence),
+                    dropReader)).isNotEqualTo(BroadcastByteRingBuffer.GATED);
+        }
+        producerDone.set(true);
+        reader.join();
+
+        assertThat(readerFailure.get()).isNull();
+        assertThat(gating.laps).isPositive();
+    }
+
     private void run(BroadcastByteRingBuffer ring, int producers, int framesPerProducer, List<ReaderRun> readers,
                      boolean retrying) throws InterruptedException {
         CountDownLatch start = new CountDownLatch(1);

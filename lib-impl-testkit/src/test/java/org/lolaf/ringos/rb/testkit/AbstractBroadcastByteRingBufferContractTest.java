@@ -16,6 +16,7 @@
 package org.lolaf.ringos.rb.testkit;
 
 import org.junit.jupiter.api.Test;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingReader;
@@ -27,13 +28,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * What one thread can expect of a {@link BroadcastByteRingBuffer} and its readers: positions, overwriting, being
- * lapped and resuming. Run once per {@link ProducerType} mode.
+ * lapped, resuming, and gating readers holding back the writes that retry. Run once per {@link ProducerType} mode.
  */
 public abstract class AbstractBroadcastByteRingBufferContractTest extends AbstractByteRingBufferTestKit {
 
     private static final int CAPACITY = 1024;
     private static final int HEADER = 16;
     private static final int MAX_FRAME = CAPACITY / 8;
+
+    private static final RetryStrategy GIVE_UP = new RetryStrategy() {
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public boolean awaitRetry() {
+            return false;
+        }
+    };
 
     private final Frame frame = new Frame();
     private final ByteBuffer dst = ByteBuffer.allocate(CAPACITY);
@@ -46,6 +58,16 @@ public abstract class AbstractBroadcastByteRingBufferContractTest extends Abstra
 
     private long write(BroadcastByteRingBuffer ring, int sequence, int length) {
         return ring.write(sequence, length, FILL, frame.of(1, sequence));
+    }
+
+    private long writeOrGiveUp(BroadcastByteRingBuffer ring, int sequence, int length) {
+        return ring.writeRetrying(sequence, length, FILL, frame.of(1, sequence), GIVE_UP);
+    }
+
+    private void fillWithLargestFrames(BroadcastByteRingBuffer ring) {
+        for (int i = 0; i < 8; i++) {
+            assertThat(writeOrGiveUp(ring, i, MAX_FRAME - HEADER)).isEqualTo((long) i * MAX_FRAME);
+        }
     }
 
     private void assertReads(ByteRingReader reader, int sequence, int length, long position) {
@@ -268,5 +290,188 @@ public abstract class AbstractBroadcastByteRingBufferContractTest extends Abstra
         assertThatThrownBy(() -> ring.write(1, ring.getMaxPayloadLength() + 1, FILL, frame.of(1, 1)))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(ring.getTailPosition()).isZero();
+    }
+
+    @Test
+    void aGatingReaderKeepsRetryingWritesOffWhatItMayStillRead() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        fillWithLargestFrames(ring);
+
+        assertThat(writeOrGiveUp(ring, 8, MAX_FRAME - HEADER)).isEqualTo(BroadcastByteRingBuffer.GATED);
+        assertThat(ring.getTailPosition()).as("nothing written").isEqualTo(CAPACITY);
+        assertReads(gating, 0, MAX_FRAME - HEADER, 0);
+        assertThat(writeOrGiveUp(ring, 8, MAX_FRAME - HEADER)).as("the frame read is kept for unread")
+                .isEqualTo(BroadcastByteRingBuffer.GATED);
+        assertReads(gating, 1, MAX_FRAME - HEADER, MAX_FRAME);
+        assertThat(writeOrGiveUp(ring, 8, MAX_FRAME - HEADER)).isEqualTo(CAPACITY);
+        for (int i = 2; i <= 8; i++) {
+            assertReads(gating, i, MAX_FRAME - HEADER, (long) i * MAX_FRAME);
+        }
+    }
+
+    @Test
+    void aWriteRetriesUntilTheGatingReaderMakesRoom() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        fillWithLargestFrames(ring);
+        int[] resets = new int[1];
+        int[] retries = new int[1];
+        RetryStrategy readingOneFramePerRetry = new RetryStrategy() {
+            @Override
+            public void reset() {
+                resets[0]++;
+            }
+
+            @Override
+            public boolean awaitRetry() {
+                retries[0]++;
+                assertThat(gating.readInto(dst, 0)).isEqualTo(MAX_FRAME - HEADER);
+                return true;
+            }
+        };
+
+        long position = ring.writeRetrying(8, MAX_FRAME - HEADER, FILL, frame.of(1, 8), readingOneFramePerRetry);
+
+        assertThat(position).isEqualTo(CAPACITY);
+        assertThat(resets[0]).isEqualTo(1);
+        assertThat(retries[0]).as("the second frame read makes room, the first being kept for unread").isEqualTo(2);
+    }
+
+    @Test
+    void aFrameCopiedFromASourceBufferIsGatedLikeOneTranslated() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        fillWithLargestFrames(ring);
+        ByteBuffer src = ByteBuffer.allocate(64);
+        fill(src, 10, 40, 1, 8);
+        src.position(3).limit(60);
+
+        assertThat(ring.writeRetrying(8, src, 10, 40, GIVE_UP)).isEqualTo(BroadcastByteRingBuffer.GATED);
+        assertReads(gating, 0, MAX_FRAME - HEADER, 0);
+        assertReads(gating, 1, MAX_FRAME - HEADER, MAX_FRAME);
+        long position = ring.writeRetrying(8, src, 10, 40, GIVE_UP);
+
+        assertThat(position).isEqualTo(CAPACITY);
+        assertThat(src.position()).isEqualTo(3);
+        assertThat(src.limit()).isEqualTo(60);
+        for (int i = 2; i < 8; i++) {
+            assertReads(gating, i, MAX_FRAME - HEADER, (long) i * MAX_FRAME);
+        }
+        assertReads(gating, 8, 40, position);
+    }
+
+    @Test
+    void aWriteWithRoomNeverCallsItsRetryStrategy() {
+        BroadcastByteRingBuffer ring = ring();
+        ring.newGatingReader();
+        RetryStrategy failing = new RetryStrategy() {
+            @Override
+            public void reset() {
+                throw new AssertionError("reset");
+            }
+
+            @Override
+            public boolean awaitRetry() {
+                throw new AssertionError("awaitRetry");
+            }
+        };
+
+        assertThat(ring.writeRetrying(1, 8, FILL, frame.of(1, 1), failing)).isZero();
+    }
+
+    @Test
+    void aReaderThatDoesNotGateHoldsNoWriteBack() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        fillWithLargestFrames(ring);
+
+        assertThat(writeOrGiveUp(ring, 8, MAX_FRAME - HEADER)).isEqualTo(CAPACITY);
+        assertThat(reader.readInto(dst, 0)).isEqualTo(ByteRingReader.LAPPED);
+    }
+
+    @Test
+    void aClosedGatingReaderNoLongerHoldsWritesBackAndCanBeLapped() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        fillWithLargestFrames(ring);
+
+        gating.close();
+
+        assertThat(writeOrGiveUp(ring, 8, MAX_FRAME - HEADER)).isEqualTo(CAPACITY);
+        assertThat(gating.readInto(dst, 0)).isEqualTo(ByteRingReader.LAPPED);
+    }
+
+    @Test
+    void aPlainWriteStillOverwritesAGatingReader() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        fillWithLargestFrames(ring);
+
+        write(ring, 8, MAX_FRAME - HEADER);
+
+        assertThat(gating.readInto(dst, 0)).isEqualTo(ByteRingReader.LAPPED);
+    }
+
+    @Test
+    void aGatingReaderSeekingBackHoldsWritesFromItsNewPosition() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        for (int i = 0; i < 3; i++) {
+            writeOrGiveUp(ring, i, MAX_FRAME - HEADER);
+            assertReads(gating, i, MAX_FRAME - HEADER, (long) i * MAX_FRAME);
+        }
+
+        assertThat(gating.seek(MAX_FRAME)).isTrue();
+
+        for (int i = 3; i <= 8; i++) {
+            assertThat(writeOrGiveUp(ring, i, MAX_FRAME - HEADER)).isEqualTo((long) i * MAX_FRAME);
+        }
+        assertThat(writeOrGiveUp(ring, 9, MAX_FRAME - HEADER)).isEqualTo(BroadcastByteRingBuffer.GATED);
+        assertReads(gating, 1, MAX_FRAME - HEADER, MAX_FRAME);
+    }
+
+    @Test
+    void aReaderReadsTheFrameItUnreadAgain() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        long first = write(ring, 1, 20);
+        long second = write(ring, 2, 30);
+        assertReads(reader, 1, 20, first);
+
+        assertThat(reader.unread()).isTrue();
+
+        assertThat(reader.getPosition()).isEqualTo(first);
+        assertReads(reader, 1, 20, first);
+        assertReads(reader, 2, 30, second);
+    }
+
+    @Test
+    void anUnreadNeedsAFrameReadSinceTheReaderLastMoved() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        long position = write(ring, 1, 20);
+
+        assertThat(reader.unread()).as("nothing read yet").isFalse();
+        assertReads(reader, 1, 20, position);
+        assertThat(reader.unread()).isTrue();
+        assertThat(reader.unread()).as("only once").isFalse();
+        reader.seekToTail();
+        assertThat(reader.unread()).as("after a seek").isFalse();
+        assertThat(reader.getPosition()).isEqualTo(ring.getTailPosition());
+    }
+
+    @Test
+    void aReaderThatDoesNotGateCannotUnreadAnOverwrittenFrame() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        write(ring, 0, MAX_FRAME - HEADER);
+        assertReads(reader, 0, MAX_FRAME - HEADER, 0);
+        for (int i = 1; i <= 8; i++) {
+            write(ring, i, MAX_FRAME - HEADER);
+        }
+
+        assertThat(reader.unread()).isFalse();
+        assertThat(reader.getPosition()).isEqualTo(MAX_FRAME);
     }
 }

@@ -15,6 +15,7 @@
  */
 package org.lolaf.ringos.rb.testkit;
 
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ByteFrameHandler;
 import org.lolaf.ringos.rb.ByteRingBuffer;
@@ -24,6 +25,8 @@ import org.lolaf.ringos.rb.ByteTranslator;
 import org.lolaf.ringos.rb.ProducerType;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The byte ring buffers as simply as they can be written: one lock, the layout the real implementations use. It
@@ -148,11 +151,13 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
 
         private final ByteBuffer buffer;
         private final int capacity;
+        private final List<Reader> gatingReaders;
         private long tail;
 
         Broadcast(int capacity) {
             this.capacity = capacity;
             this.buffer = ByteBuffer.allocateDirect(capacity);
+            this.gatingReaders = new ArrayList<>();
         }
 
         @Override
@@ -195,6 +200,45 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
         }
 
         @Override
+        public <A> long writeRetrying(int type, int length, ByteTranslator<A> translator, A arg,
+                                      RetryStrategy retryStrategy) {
+            checkFrame(type, length, getMaxPayloadLength());
+            for (boolean retrying = false; ; retrying = true) {
+                synchronized (this) {
+                    if (reach(length) <= slowestGate()) {
+                        return write(type, length, translator, arg);
+                    }
+                }
+                if (!retrying) {
+                    retryStrategy.reset();
+                }
+                if (!retryStrategy.awaitRetry()) {
+                    return GATED;
+                }
+            }
+        }
+
+        @Override
+        public long writeRetrying(int type, ByteBuffer src, int srcIndex, int length, RetryStrategy retryStrategy) {
+            return writeRetrying(type, length, (buffer, index, l, s) -> copy(s, srcIndex, buffer, index, l), src,
+                    retryStrategy);
+        }
+
+        private long reach(int length) {
+            int frame = align(HEADER + length, HEADER);
+            int toEnd = capacity - (int) (tail & (capacity - 1));
+            return tail + (frame > toEnd ? toEnd : 0) + frame - capacity;
+        }
+
+        private long slowestGate() {
+            long slowest = Long.MAX_VALUE;
+            for (Reader reader : gatingReaders) {
+                slowest = Math.min(slowest, reader.frameToUnread ? reader.framePosition : reader.position);
+            }
+            return slowest;
+        }
+
+        @Override
         public synchronized long getTailPosition() {
             return tail;
         }
@@ -202,6 +246,13 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
         @Override
         public synchronized ByteRingReader newReader() {
             return new Reader(this, tail);
+        }
+
+        @Override
+        public synchronized ByteRingReader newGatingReader() {
+            Reader reader = new Reader(this, tail);
+            gatingReaders.add(reader);
+            return reader;
         }
     }
 
@@ -211,6 +262,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
         private long position;
         private int type;
         private long framePosition = -1;
+        private boolean frameToUnread;
 
         Reader(Broadcast ring, long position) {
             this.ring = ring;
@@ -246,6 +298,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
                     copy(ring.buffer, index + Broadcast.HEADER, dst, dstIndex, length);
                     type = frameType;
                     framePosition = position;
+                    frameToUnread = true;
                     position += frame;
                     return length;
                 }
@@ -267,6 +320,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
             synchronized (ring) {
                 if (target == ring.tail) {
                     position = target;
+                    frameToUnread = false;
                     return true;
                 }
                 if (target > ring.tail || target < ring.tail - ring.capacity || target % Broadcast.HEADER != 0) {
@@ -276,6 +330,7 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
                     return false;
                 }
                 position = target;
+                frameToUnread = false;
                 return true;
             }
         }
@@ -284,6 +339,26 @@ public class LockingByteRingBufferBuilder implements ByteRingBufferBuilder {
         public void seekToTail() {
             synchronized (ring) {
                 position = ring.tail;
+                frameToUnread = false;
+            }
+        }
+
+        @Override
+        public boolean unread() {
+            synchronized (ring) {
+                if (!frameToUnread || framePosition < ring.tail - ring.capacity) {
+                    return false;
+                }
+                position = framePosition;
+                frameToUnread = false;
+                return true;
+            }
+        }
+
+        @Override
+        public void close() {
+            synchronized (ring) {
+                ring.gatingReaders.remove(this);
             }
         }
     }

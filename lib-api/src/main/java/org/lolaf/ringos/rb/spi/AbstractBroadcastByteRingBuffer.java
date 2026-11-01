@@ -16,12 +16,15 @@
 package org.lolaf.ringos.rb.spi;
 
 import jdk.internal.vm.annotation.Contended;
+import org.lolaf.ringos.idling.RetryStrategy;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ByteRingReader;
 import org.lolaf.ringos.rb.ByteTranslator;
 
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The protocol of a {@link BroadcastByteRingBuffer} with one writer at a time, after Agrona's
@@ -34,6 +37,11 @@ import java.nio.ByteBuffer;
  * {@code tail}. A reader copies a frame, fences, and re-reads {@code tailIntent}: if a writer may have reached the
  * frame's bytes during the copy, the frame is reported {@link ByteRingReader#LAPPED} rather than handed over. The
  * position in the header tells a frame from the one of a previous lap at the same index.
+ *
+ * <p>A gating reader publishes a gate, the first position it may still read: the frame it last read, for
+ * {@link ByteRingReader#unread()}. {@link #writeRetrying} writes only when the frame's reach, its end less the capacity,
+ * is at or before every gate. Gates are added, removed and moved back under the writers' lock, which
+ * {@code writeRetrying} takes too, so a gate never moves back past a write; they move forward without it, which only makes room.
  */
 public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRingBuffer {
 
@@ -52,10 +60,17 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Contended
     protected long tailIntent;
     /**
-     * Held by the writer of a {@link org.lolaf.ringos.rb.ProducerType#MULTI} buffer; unused otherwise.
+     * Held by every {@link #writeRetrying}, by a gate added, removed or moved back, and by each write of a
+     * {@link org.lolaf.ringos.rb.ProducerType#MULTI} buffer.
      */
     @Contended
     protected int writeLock;
+    private static final AtomicLong[] NO_GATES = new AtomicLong[0];
+    private volatile AtomicLong[] gates = NO_GATES;
+    /**
+     * At or before every gate, under the writers' lock: a write that fits before it reads no gate.
+     */
+    private long minGate = Long.MAX_VALUE;
 
     /**
      * @param buffer exactly {@code capacity} bytes with an address aligned to 8, so its header fields can be accessed
@@ -67,6 +82,10 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         this.mask = capacity - 1;
         this.maxPayloadLength = capacity / 8 - HEADER;
     }
+
+    protected abstract void lockWriters();
+
+    protected abstract void unlockWriters();
 
     protected abstract long getTailAcquire();
 
@@ -97,6 +116,72 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Override
     public <A> long write(int type, int length, ByteTranslator<A> translator, A arg) {
         AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        return publish(type, length, translator, arg);
+    }
+
+    @Override
+    public <A> long writeRetrying(int type, int length, ByteTranslator<A> translator, A arg,
+                                  RetryStrategy retryStrategy) {
+        AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        if (notLockedWithRoomFor(length, retryStrategy)) {
+            return GATED;
+        }
+        try {
+            return publish(type, length, translator, arg);
+        } finally {
+            unlockWriters();
+        }
+    }
+
+    @Override
+    public long writeRetrying(int type, ByteBuffer src, int srcIndex, int length, RetryStrategy retryStrategy) {
+        AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        if (notLockedWithRoomFor(length, retryStrategy)) {
+            return GATED;
+        }
+        try {
+            return publish(type, src, srcIndex, length);
+        } finally {
+            unlockWriters();
+        }
+    }
+
+    private boolean notLockedWithRoomFor(int length, RetryStrategy retryStrategy) {
+        for (boolean retrying = false; ; retrying = true) {
+            lockWriters();
+            if (hasRoom(length)) {
+                return false;
+            }
+            unlockWriters();
+            if (!retrying) {
+                retryStrategy.reset();
+            }
+            if (!retryStrategy.awaitRetry()) {
+                return true;
+            }
+        }
+    }
+
+    private boolean hasRoom(int length) {
+        long position = tail;
+        int frame = align(HEADER + length);
+        long reach = position + paddingBefore(position, frame) + frame - capacity;
+        if (reach <= minGate) {
+            return true;
+        }
+        minGate = slowestGate();
+        return reach <= minGate;
+    }
+
+    private long slowestGate() {
+        long slowest = Long.MAX_VALUE;
+        for (AtomicLong gate : gates) {
+            slowest = Math.min(slowest, gate.getAcquire());
+        }
+        return slowest;
+    }
+
+    private <A> long publish(int type, int length, ByteTranslator<A> translator, A arg) {
         long position = begin(type, length);
         try {
             translator.translate(buffer, index(position) + HEADER, length, arg);
@@ -112,6 +197,10 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Override
     public long write(int type, ByteBuffer src, int srcIndex, int length) {
         AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        return publish(type, src, srcIndex, length);
+    }
+
+    private long publish(int type, ByteBuffer src, int srcIndex, int length) {
         long position = begin(type, length);
         copyIn(src, srcIndex, index(position) + HEADER, length);
         end(position, length);
@@ -128,8 +217,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         long position = tail;
         int frame = align(HEADER + length);
         int index = index(position);
-        int toEnd = capacity - index;
-        int padding = frame > toEnd ? toEnd : 0;
+        int padding = paddingBefore(position, frame);
         setTailIntentRelease(position + padding + frame);
         VarHandle.storeStoreFence();
         if (padding > 0) {
@@ -138,6 +226,11 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         }
         header(index(position), HEADER + length, type, position);
         return position;
+    }
+
+    private int paddingBefore(long position, int frame) {
+        int toEnd = capacity - index(position);
+        return frame > toEnd ? toEnd : 0;
     }
 
     private void end(long position, int length) {
@@ -171,7 +264,23 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
 
     @Override
     public ByteRingReader newReader() {
-        return new Reader(getTailAcquire());
+        return new Reader(getTailAcquire(), null);
+    }
+
+    @Override
+    public ByteRingReader newGatingReader() {
+        lockWriters();
+        try {
+            long position = getTailAcquire();
+            AtomicLong gate = new AtomicLong(position);
+            AtomicLong[] added = Arrays.copyOf(gates, gates.length + 1);
+            added[gates.length] = gate;
+            gates = added;
+            minGate = Math.min(minGate, position);
+            return new Reader(position, gate);
+        } finally {
+            unlockWriters();
+        }
     }
 
     protected int index(long position) {
@@ -182,27 +291,27 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
         return (length + ALIGNMENT - 1) & -ALIGNMENT;
     }
 
-    /**
-     * Whether a writer may have reached the bytes from {@code position} on; read after the bytes it vouches for.
-     */
-    private boolean overwritten(long position) {
-        VarHandle.acquireFence();
-        return getTailIntentAcquire() - capacity > position;
-    }
-
     private final class Reader implements ByteRingReader {
 
         private long position;
         private int type;
         private long framePosition = -1;
+        private boolean frameToUnread;
+        private AtomicLong gate;
 
-        Reader(long position) {
+        Reader(long position, AtomicLong gate) {
             this.position = position;
+            this.gate = gate;
         }
 
         @Override
         public long getPosition() {
             return position;
+        }
+
+        private boolean overwritten(long position) {
+            VarHandle.acquireFence();
+            return getTailIntentAcquire() - capacity > position;
         }
 
         @Override
@@ -238,6 +347,10 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
                 }
                 type = frameType;
                 framePosition = position;
+                frameToUnread = true;
+                if (gate != null) {
+                    gate.setRelease(position);
+                }
                 position += align(record);
                 return length;
             }
@@ -255,25 +368,74 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
 
         @Override
         public boolean seek(long target) {
-            long published = getTailAcquire();
-            if (target == published) {
-                position = target;
+            if (gate == null || target >= gate.get()) {
+                return moveTo(target);
+            }
+            lockWriters();
+            try {
+                if (!moveTo(target)) {
+                    return false;
+                }
+                minGate = Math.min(minGate, target);
                 return true;
+            } finally {
+                unlockWriters();
             }
-            if (target > published || target % ALIGNMENT != 0 || getTailIntentAcquire() - capacity > target) {
-                return false;
-            }
-            long tag = getLongPlain(index(target) + POSITION_OFFSET);
-            if (tag != target || overwritten(target)) {
-                return false;
+        }
+
+        private boolean moveTo(long target) {
+            long published = getTailAcquire();
+            if (target != published) {
+                if (target > published || target % ALIGNMENT != 0 || getTailIntentAcquire() - capacity > target) {
+                    return false;
+                }
+                long tag = getLongPlain(index(target) + POSITION_OFFSET);
+                if (tag != target || overwritten(target)) {
+                    return false;
+                }
             }
             position = target;
+            frameToUnread = false;
+            if (gate != null) {
+                gate.setRelease(target);
+            }
             return true;
         }
 
         @Override
         public void seekToTail() {
             position = getTailAcquire();
+            frameToUnread = false;
+            if (gate != null) {
+                gate.setRelease(position);
+            }
+        }
+
+        @Override
+        public boolean unread() {
+            if (!frameToUnread || gate == null && overwritten(framePosition)) {
+                return false;
+            }
+            position = framePosition;
+            frameToUnread = false;
+            return true;
+        }
+
+        @Override
+        public void close() {
+            if (gate != null) {
+                removeGate(gate);
+                gate = null;
+            }
+        }
+
+        private void removeGate(AtomicLong gate) {
+            lockWriters();
+            try {
+                gates = Arrays.stream(gates).filter(other -> other != gate).toArray(AtomicLong[]::new);
+            } finally {
+                unlockWriters();
+            }
         }
     }
 }

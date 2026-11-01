@@ -30,6 +30,7 @@ public class MethodHandleSpBroadcastByteRingBuffer extends AbstractBroadcastByte
 
     private static final VarHandle TAIL;
     private static final VarHandle TAIL_INTENT;
+    private static final VarHandle WRITE_LOCK;
     private static final VarHandle INT = MethodHandles.byteBufferViewVarHandle(int[].class, ByteOrder.nativeOrder());
     private static final VarHandle LONG = MethodHandles.byteBufferViewVarHandle(long[].class, ByteOrder.nativeOrder());
 
@@ -38,6 +39,7 @@ public class MethodHandleSpBroadcastByteRingBuffer extends AbstractBroadcastByte
             MethodHandles.Lookup lookup = MethodHandles.lookup();
             TAIL = lookup.findVarHandle(MethodHandleSpBroadcastByteRingBuffer.class, "tail", long.class);
             TAIL_INTENT = lookup.findVarHandle(MethodHandleSpBroadcastByteRingBuffer.class, "tailIntent", long.class);
+            WRITE_LOCK = lookup.findVarHandle(MethodHandleSpBroadcastByteRingBuffer.class, "writeLock", int.class);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }
@@ -51,6 +53,18 @@ public class MethodHandleSpBroadcastByteRingBuffer extends AbstractBroadcastByte
         ByteBuffer aligned = ByteBuffer.allocateDirect(capacity + 64).alignedSlice(64);
         aligned.limit(capacity);
         return aligned.slice();
+    }
+
+    @Override
+    protected void lockWriters() {
+        while (!WRITE_LOCK.compareAndSet(this, 0, 1)) {
+            Thread.onSpinWait();
+        }
+    }
+
+    @Override
+    protected void unlockWriters() {
+        WRITE_LOCK.setRelease(this, 0);
     }
 
     @Override

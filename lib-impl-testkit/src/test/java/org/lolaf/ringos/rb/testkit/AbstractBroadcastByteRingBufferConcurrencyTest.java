@@ -17,6 +17,8 @@ package org.lolaf.ringos.rb.testkit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.lolaf.ringos.idling.RetryStrategy;
+import org.lolaf.ringos.idling.YieldingIdleStrategy;
 import org.lolaf.ringos.rb.BroadcastByteRingBuffer;
 import org.lolaf.ringos.rb.ProducerType;
 import org.lolaf.ringos.rb.ByteRingReader;
@@ -39,7 +41,7 @@ import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.
 /**
  * Producers, as many as the {@link ProducerType} allows, and several readers of a {@link BroadcastByteRingBuffer}. A
  * reader is never handed a torn frame, never sees a producer's frames out of order, and is told when it was lapped;
- * one that keeps up loses nothing.
+ * one that keeps up loses nothing, and so does a gating one, however slow, when the producers write retrying.
  */
 public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends AbstractByteRingBufferTestKit {
 
@@ -66,7 +68,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         List<ReaderRun> readers = List.of(new ReaderRun(ring, producers, 0), new ReaderRun(ring, producers, 0),
                 new ReaderRun(ring, producers, 0));
 
-        run(ring, producers, framesPerProducer, readers);
+        run(ring, producers, framesPerProducer, readers, false);
 
         for (ReaderRun reader : readers) {
             assertThat(reader.failure.get()).isNull();
@@ -87,7 +89,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         ReaderRun fast = new ReaderRun(ring, producers, 0);
         ReaderRun slow = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50));
 
-        run(ring, producers, 50_000, List.of(fast, slow));
+        run(ring, producers, 50_000, List.of(fast, slow), false);
 
         assertThat(fast.failure.get()).isNull();
         assertThat(slow.failure.get()).isNull();
@@ -95,8 +97,31 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         assertThat(slow.frames).isPositive();
     }
 
-    private void run(BroadcastByteRingBuffer ring, int producers, int framesPerProducer, List<ReaderRun> readers)
-            throws InterruptedException {
+    /**
+     * The same small buffer, the producers retrying: the slow reader gates them, so it is never lapped, gets every
+     * frame, and finds each frame it unreads unchanged; a reader that does not gate beside it may still be lapped.
+     */
+    @Test
+    @Timeout(120)
+    void aSlowGatingReaderHoldsRetryingWritesBackAndLosesNothing() throws InterruptedException {
+        BroadcastByteRingBuffer ring = byteRingBufferBuilder().buildBroadcast(1024, producers());
+        int producers = producerCount();
+        int framesPerProducer = 20_000;
+        ReaderRun gating = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50), true);
+        ReaderRun plain = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50), false);
+
+        run(ring, producers, framesPerProducer, List.of(gating, plain), true);
+
+        assertThat(gating.failure.get()).isNull();
+        assertThat(gating.laps).isZero();
+        assertThat(gating.frames).isEqualTo((long) producers * framesPerProducer);
+        assertThat(gating.gaps).as("gaps in a producer's sequence").isZero();
+        assertThat(gating.unreads).isPositive();
+        assertThat(plain.failure.get()).isNull();
+    }
+
+    private void run(BroadcastByteRingBuffer ring, int producers, int framesPerProducer, List<ReaderRun> readers,
+                     boolean retrying) throws InterruptedException {
         CountDownLatch start = new CountDownLatch(1);
         AtomicBoolean producersDone = new AtomicBoolean();
         CountDownLatch producing = new CountDownLatch(producers);
@@ -105,10 +130,15 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
             int producer = p;
             threads.add(new Thread(() -> {
                 Frame frame = new Frame();
+                RetryStrategy retryForever = RetryStrategy.idlingWhile(YieldingIdleStrategy.getInstance(), () -> true);
                 await(start);
                 for (int sequence = 0; sequence < framesPerProducer; sequence++) {
-                    ring.write(producer, payloadLength(producer, sequence, MAX_PAYLOAD), FILL,
-                            frame.of(producer, sequence));
+                    int length = payloadLength(producer, sequence, MAX_PAYLOAD);
+                    if (retrying) {
+                        ring.writeRetrying(producer, length, FILL, frame.of(producer, sequence), retryForever);
+                    } else {
+                        ring.write(producer, length, FILL, frame.of(producer, sequence));
+                    }
                 }
                 producing.countDown();
                 if (producing.getCount() == 0) {
@@ -131,17 +161,26 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         private final ByteRingReader reader;
         private final BroadcastByteRingBuffer ring;
         private final ByteBuffer dst;
+        private final ByteBuffer reread;
+        private final boolean gating;
         private final int[] last;
         private final long pauseNanos;
         private final AtomicReference<String> failure = new AtomicReference<>();
         private long frames;
         private long laps;
         private long gaps;
+        private long unreads;
 
         ReaderRun(BroadcastByteRingBuffer ring, int producers, long pauseNanos) {
+            this(ring, producers, pauseNanos, false);
+        }
+
+        ReaderRun(BroadcastByteRingBuffer ring, int producers, long pauseNanos, boolean gating) {
             this.ring = ring;
-            this.reader = ring.newReader();
+            this.gating = gating;
+            this.reader = gating ? ring.newGatingReader() : ring.newReader();
             this.dst = ByteBuffer.allocate(MAX_PAYLOAD);
+            this.reread = ByteBuffer.allocate(MAX_PAYLOAD);
             this.last = new int[producers];
             Arrays.fill(last, -1);
             this.pauseNanos = pauseNanos;
@@ -156,17 +195,43 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
                     reader.seekToTail();
                 } else if (length == ByteRingReader.NO_FRAME) {
                     if (producersDone.get() && reader.getPosition() == ring.getTailPosition()) {
+                        reader.close();
                         return;
                     }
                     Thread.onSpinWait();
                 } else {
                     check(length);
+                    if (gating && frames % 97 == 0) {
+                        checkUnread(length);
+                    }
                     if (pauseNanos > 0 && frames % 64 == 0) {
                         LockSupport.parkNanos(pauseNanos);
                     }
                 }
             }
             failure.compareAndSet(null, "still reading at the deadline after " + frames + " frames");
+        }
+
+        private void checkUnread(int length) {
+            unreads++;
+            long position = reader.getFramePosition();
+            if (!reader.unread()) {
+                failure.compareAndSet(null, "a gating reader could not unread the frame at " + position);
+                return;
+            }
+            if (reader.readInto(reread, 0) != length || reader.getFramePosition() != position
+                    || !sameBytes(reread, dst, length)) {
+                failure.compareAndSet(null, "the frame unread at " + position + " changed");
+            }
+        }
+
+        private static boolean sameBytes(ByteBuffer a, ByteBuffer b, int length) {
+            for (int i = 0; i < length; i++) {
+                if (a.get(i) != b.get(i)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private void check(int length) {

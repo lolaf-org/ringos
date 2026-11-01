@@ -17,8 +17,6 @@ package org.lolaf.ringos.rb.methodhandle;
 
 import org.lolaf.ringos.rb.ByteTranslator;
 
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 
 /**
@@ -26,47 +24,27 @@ import java.nio.ByteBuffer;
  */
 public class MethodHandleMpBroadcastByteRingBuffer extends MethodHandleSpBroadcastByteRingBuffer {
 
-    private static final VarHandle WRITE_LOCK;
-
-    static {
-        try {
-            WRITE_LOCK = MethodHandles.lookup().findVarHandle(MethodHandleMpBroadcastByteRingBuffer.class, "writeLock", int.class);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
     public MethodHandleMpBroadcastByteRingBuffer(int capacity) {
         super(capacity);
     }
 
     @Override
     public <A> long write(int type, int length, ByteTranslator<A> translator, A arg) {
-        lock();
+        lockWriters();
         try {
             return super.write(type, length, translator, arg);
         } finally {
-            unlock();
+            unlockWriters();
         }
     }
 
     @Override
     public long write(int type, ByteBuffer src, int srcIndex, int length) {
-        lock();
+        lockWriters();
         try {
             return super.write(type, src, srcIndex, length);
         } finally {
-            unlock();
+            unlockWriters();
         }
-    }
-
-    private void lock() {
-        while (!WRITE_LOCK.compareAndSet(this, 0, 1)) {
-            Thread.onSpinWait();
-        }
-    }
-
-    private void unlock() {
-        WRITE_LOCK.setRelease(this, 0);
     }
 }

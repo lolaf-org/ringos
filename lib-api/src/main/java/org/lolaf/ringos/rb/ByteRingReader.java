@@ -51,6 +51,8 @@ public interface ByteRingReader {
     /**
      * Copies the next frame's payload into {@code dst} at {@code dstIndex} and moves past it.
      *
+     * @param dst      receives the payload, its position and limit left alone
+     * @param dstIndex where the payload goes in {@code dst}
      * @return the payload length, {@link #NO_FRAME} when no frame was published since, {@link #NO_ROOM} when it does
      * not fit after {@code dstIndex}, or {@link #LAPPED}, after which the reader stays where it is until {@link #seek}
      * or {@link #seekToTail} moves it; what {@code dst} holds is then garbage
@@ -68,12 +70,29 @@ public interface ByteRingReader {
     long getFramePosition();
 
     /**
-     * Moves to a frame position, to resume where an earlier reader stopped.
+     * Moves to a frame position, to resume where an earlier reader stopped. A gating reader moving back takes the
+     * writers' lock.
      *
+     * @param position a frame's position, from {@link #getFramePosition()} or {@link BroadcastByteRingBuffer#write},
+     *                 or the tail
      * @return {@code false}, and the reader left where it was, when {@code position} is neither the tail nor the start
      * of a frame still in the buffer
      */
     boolean seek(long position);
 
     void seekToTail();
+
+    /**
+     * Moves back to the frame last read, so the next {@link #readInto} reads it again.
+     *
+     * @return {@code false}, and the reader left where it was, when no frame was read since the reader last moved, or
+     * when it was overwritten, which a gating reader's never is
+     */
+    boolean unread();
+
+    /**
+     * Stops gating writers, for a reader from {@link BroadcastByteRingBuffer#newGatingReader()}; nothing for another.
+     * The reader can still read, and be lapped.
+     */
+    void close();
 }

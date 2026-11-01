@@ -20,7 +20,10 @@ matching `[x.y.z]:` link definition at the foot of the file.
     any number of independent readers. A write never waits: the oldest frames are overwritten, and a reader left
     behind is told it was lapped instead of being handed a damaged frame. Readers can resume from a saved
     position, and can fill a buffer with as many frames as fit: a frame too large for the room left is reported and
-    left for the next read.
+    left for the next read. A reader can step back to the frame it last read with `unread()`.
+  - Readers that must not be lapped: a reader from `newGatingReader()` holds back every `writeRetrying`, which waits
+    for room as long as its `RetryStrategy` allows and then gives up without writing (`GATED`). Such a reader can
+    always `unread()`, and stops holding writes back once closed. A plain `write` still never waits.
   - On Java 16 and later the frames are copied as fast as Agrona's equivalents; on Java 11 to 15 large frames are
     several times slower. No JVM flags are needed.
 - **`ProducerType`** (`SINGLE`, `MULTI`) says who may write to a buffer: it is what you pass to

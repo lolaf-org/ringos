@@ -31,6 +31,9 @@ matching `[x.y.z]:` link definition at the foot of the file.
   access type.
 - **New runtime artifact** `ringos-lib-impl-method-handle-16-provider`, part of `ringos-lib-impl-all`, so nothing
   changes for applications depending on the aggregator.
+- **`BackoffIdleStrategy` can be woken**: `wakeup()`, from any thread, cuts its park short, so a producer that signals
+  after publishing no longer leaves the consumer asleep for up to its longest park (1 ms by default). It did nothing
+  before. A wakeup racing the first park after a `reset()` can still be missed.
 
 ## [0.9.1] - 2026-09-26
 

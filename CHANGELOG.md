@@ -23,9 +23,10 @@ matching `[x.y.z]:` link definition at the foot of the file.
     left for the next read. A reader can step back to the frame it last read with `unread()`.
   - Readers that must not be lapped: a reader from `newGatingReader()` holds back every `writeRetrying`, which waits
     for room as long as its `RetryStrategy` allows and then gives up without writing (`GATED`). Such a reader can
-    always `unread()`, and stops holding writes back once closed. A plain `write` still never waits.
+    `unread()` unless a plain `write` overwrote the frame, and stops holding writes back once closed. A plain `write` still never waits.
   - On Java 16 and later the frames are copied as fast as Agrona's equivalents; on Java 11 to 15 large frames are
-    several times slower. No JVM flags are needed.
+    several times slower. No JVM flags are needed to run them; `-XX:-RestrictContended -XX:ContendedPaddingWidth=64`
+    gives their best performance, and an error is logged when that padding is missing.
 - **`ProducerType`** (`SINGLE`, `MULTI`) says who may write to a buffer: it is what you pass to
   `ByteRingBufferFactory.broadcast`, and `RingBufferFactory.AccessType.getProducerType()` gives the producer half of an
   access type.

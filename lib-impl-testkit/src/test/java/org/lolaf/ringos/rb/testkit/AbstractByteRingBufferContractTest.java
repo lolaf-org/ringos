@@ -16,6 +16,7 @@
 package org.lolaf.ringos.rb.testkit;
 
 import org.junit.jupiter.api.Test;
+import org.lolaf.ringos.rb.ByteFrameHandler;
 import org.lolaf.ringos.rb.ByteRingBuffer;
 
 import java.nio.ByteBuffer;
@@ -174,6 +175,43 @@ public abstract class AbstractByteRingBufferContractTest extends AbstractByteRin
         assertThat(src.limit()).isEqualTo(60);
         readAll(queue);
         assertThat(read).containsExactly("2:40:true");
+    }
+
+    @Test
+    void aSourceThatCannotSupplyThePayloadIsRefusedAndTheQueueStaysUsable() {
+        ByteRingBuffer queue = queue();
+        ByteBuffer tooShort = ByteBuffer.allocate(64).limit(8);
+
+        assertThatThrownBy(() -> queue.write(1, tooShort, 0, 64)).isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> queue.write(1, tooShort, -1, 8)).isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> queue.write(1, null, 0, 8)).isInstanceOf(NullPointerException.class);
+
+        assertThat(queue.getSize()).isZero();
+        assertThat(write(queue, 2, 40)).isTrue();
+        assertThat(readAll(queue)).isEqualTo(1);
+        assertThat(read).containsExactly("2:40:true");
+    }
+
+    @Test
+    void aFrameWhoseHandlerThrowsIsHandedOverAgainAndThoseBeforeItAreFreed() {
+        ByteRingBuffer queue = queue();
+        write(queue, 0, MIN_PAYLOAD);
+        write(queue, 1, MIN_PAYLOAD);
+        boolean[] failing = {true};
+        ByteFrameHandler handler = (type, buffer, index, length) -> {
+            if (type == 1 && failing[0]) {
+                throw new IllegalStateException("refused");
+            }
+            read.add(String.valueOf(type));
+        };
+
+        assertThatThrownBy(() -> queue.read(handler, 10)).isInstanceOf(IllegalStateException.class);
+        assertThat(queue.getSize()).as("only the second frame is left").isEqualTo(16);
+
+        failing[0] = false;
+        assertThat(queue.read(handler, 10)).isEqualTo(1);
+        assertThat(read).containsExactly("0", "1");
+        assertThat(queue.getSize()).isZero();
     }
 
     @Test

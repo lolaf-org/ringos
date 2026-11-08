@@ -45,6 +45,10 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRingBuffer {
 
+    static {
+        ContendedPadding.check(AbstractBroadcastByteRingBuffer.class, "tail", "tailIntent");
+    }
+
     public static final int HEADER = 16;
     public static final int ALIGNMENT = 16;
     public static final int PADDING_TYPE = -1;
@@ -136,6 +140,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Override
     public long writeRetrying(int type, ByteBuffer src, int srcIndex, int length, RetryStrategy retryStrategy) {
         AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        AbstractMpScByteRingBuffer.checkSource(src, srcIndex, length);
         if (notLockedWithRoomFor(length, retryStrategy)) {
             return GATED;
         }
@@ -197,6 +202,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
     @Override
     public long write(int type, ByteBuffer src, int srcIndex, int length) {
         AbstractMpScByteRingBuffer.checkFrame(type, length, maxPayloadLength);
+        AbstractMpScByteRingBuffer.checkSource(src, srcIndex, length);
         return publish(type, src, srcIndex, length);
     }
 
@@ -411,7 +417,7 @@ public abstract class AbstractBroadcastByteRingBuffer implements BroadcastByteRi
 
         @Override
         public boolean unread() {
-            if (!frameToUnread || gate == null && overwritten(framePosition)) {
+            if (!frameToUnread || overwritten(framePosition)) {
                 return false;
             }
             position = framePosition;

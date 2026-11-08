@@ -403,6 +403,35 @@ public abstract class AbstractBroadcastByteRingBufferContractTest extends Abstra
     }
 
     @Test
+    void aSourceThatCannotSupplyThePayloadIsRefusedAndTheRingStaysUsable() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader reader = ring.newReader();
+        ByteBuffer tooShort = ByteBuffer.allocate(64).limit(8);
+
+        assertThatThrownBy(() -> ring.write(1, tooShort, 0, 64)).isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> ring.write(1, null, 0, 8)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> ring.writeRetrying(1, tooShort, 0, 64, GIVE_UP)).isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> ring.writeRetrying(1, null, 0, 8, GIVE_UP)).isInstanceOf(NullPointerException.class);
+
+        assertThat(ring.getTailPosition()).isZero();
+        assertThat(reader.readInto(dst, 0)).isEqualTo(ByteRingReader.NO_FRAME);
+        assertReads(reader, 2, 40, write(ring, 2, 40));
+    }
+
+    @Test
+    void aGatingReaderCannotUnreadAFrameAPlainWriteOverwrote() {
+        BroadcastByteRingBuffer ring = ring();
+        ByteRingReader gating = ring.newGatingReader();
+        write(ring, 0, MAX_FRAME - HEADER);
+        assertReads(gating, 0, MAX_FRAME - HEADER, 0);
+        for (int i = 1; i <= 8; i++) {
+            write(ring, i, MAX_FRAME - HEADER);
+        }
+
+        assertThat(gating.unread()).isFalse();
+    }
+
+    @Test
     void aPlainWriteStillOverwritesAGatingReader() {
         BroadcastByteRingBuffer ring = ring();
         ByteRingReader gating = ring.newGatingReader();

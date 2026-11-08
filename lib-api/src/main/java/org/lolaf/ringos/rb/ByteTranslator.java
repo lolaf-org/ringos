@@ -31,6 +31,8 @@ public interface ByteTranslator<A> {
     /**
      * Writes exactly {@code length} bytes at {@code index}, with absolute puts. {@code buffer} is the ring's own: its
      * position and limit must not be changed, nor anything written outside the range, which belongs to other frames.
+     * A broadcast ring may call this under its writers' spin lock, which is not reentrant: creating or closing a gating
+     * reader here, or seeking one back, hangs the thread.
      */
     void translate(ByteBuffer buffer, int index, int length, A arg);
 }

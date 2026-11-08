@@ -86,14 +86,14 @@ public interface ByteRingReader {
      * Moves back to the frame last read, so the next {@link #readInto} reads it again.
      *
      * @return {@code false}, and the reader left where it was, when no frame was read since the reader last moved, or
-     * when it was overwritten, which a gating reader's never is
+     * when it was overwritten, which for a gating reader takes a plain {@code write}
      */
     boolean unread();
 
     /**
      * Stops gating writers, for a reader from {@link BroadcastByteRingBuffer#newGatingReader()}; nothing for another.
      * The reader can still read, and be lapped. Any thread, unlike the other methods, so a writer's thread can drop a
-     * reader that holds it back.
+     * reader that holds it back; but not a {@link ByteTranslator}, see there.
      */
     void close();
 }

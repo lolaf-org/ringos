@@ -15,6 +15,7 @@
  */
 package org.lolaf.ringos.rb.testkit;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -104,6 +106,45 @@ public abstract class AbstractByteRingBufferConcurrencyTest extends AbstractByte
         assertThat(failure.get()).isNull();
         assertThat(received[0]).isEqualTo((long) producers * FRAMES_PER_PRODUCER);
         assertThat(queue.getSize()).isZero();
+    }
+
+    @Test
+    @Timeout(120)
+    void theSizeStaysWithinTheCapacityWhileFramesMove() throws InterruptedException {
+        ByteRingBuffer queue = byteRingBufferBuilder().buildQueue(1024);
+        int frames = 2_000_000;
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicBoolean consumed = new AtomicBoolean();
+        AtomicReference<Integer> outOfRange = new AtomicReference<>();
+        Thread producer = new Thread(() -> {
+            Frame frame = new Frame();
+            await(start);
+            for (int sequence = 0; sequence < frames; sequence++) {
+                while (!queue.write(0, MIN_PAYLOAD, FILL, frame.of(0, sequence))) {
+                    Thread.onSpinWait();
+                }
+            }
+        }, "producer");
+        Thread consumer = new Thread(() -> {
+            await(start);
+            for (int received = 0; received < frames; ) {
+                received += queue.read((type, buffer, index, length) -> { }, 64);
+            }
+            consumed.set(true);
+        }, "consumer");
+        Thread monitor = new Thread(() -> {
+            await(start);
+            while (!consumed.get()) {
+                int size = queue.getSize();
+                if (size < 0 || size > queue.getCapacity()) {
+                    outOfRange.compareAndSet(null, size);
+                }
+            }
+        }, "monitor");
+
+        startAndAwait(List.of(producer, consumer, monitor), start);
+
+        assertThat(outOfRange.get()).isNull();
     }
 
     static void await(CountDownLatch latch) {

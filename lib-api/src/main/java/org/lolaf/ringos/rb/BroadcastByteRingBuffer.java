@@ -73,6 +73,7 @@ public interface BroadcastByteRingBuffer {
      * @return the frame's position
      * @throws IllegalArgumentException if {@code type} is negative or {@code length} exceeds
      *                                  {@link #getMaxPayloadLength()}
+     * @throws IndexOutOfBoundsException if the range is not within {@code src}'s limit, nothing being written
      * @see #write(int, int, ByteTranslator, Object)
      */
     long write(int type, ByteBuffer src, int srcIndex, int length);
@@ -109,6 +110,7 @@ public interface BroadcastByteRingBuffer {
      * @return the frame's position, or {@link #GATED} with nothing written when {@code retryStrategy} gave up
      * @throws IllegalArgumentException if {@code type} is negative or {@code length} exceeds
      *                                  {@link #getMaxPayloadLength()}
+     * @throws IndexOutOfBoundsException if the range is not within {@code src}'s limit, nothing being written
      */
     long writeRetrying(int type, ByteBuffer src, int srcIndex, int length, RetryStrategy retryStrategy);
 
@@ -124,8 +126,8 @@ public interface BroadcastByteRingBuffer {
 
     /**
      * A reader at the tail that {@link #writeRetrying} never laps until it is {@link ByteRingReader#close() closed}: the
-     * frame it last read stays in the buffer, so {@link ByteRingReader#unread()} always succeeds. A plain
-     * {@link #write} still overwrites it.
+     * frame it last read stays in the buffer for {@link ByteRingReader#unread()}. A plain {@link #write} still
+     * overwrites it.
      */
     ByteRingReader newGatingReader();
 }

@@ -48,13 +48,15 @@ public interface ByteRingBuffer {
     /**
      * Copies {@code length} bytes of {@code src} from {@code srcIndex}, leaving its position and limit alone.
      *
+     * @throws IndexOutOfBoundsException if the range is not within {@code src}'s limit, nothing being written
      * @see #write(int, int, ByteTranslator, Object)
      */
     boolean write(int type, ByteBuffer src, int srcIndex, int length);
 
     /**
      * Hands up to {@code limit} frames to the handler in the order they were published, then frees their space.
-     * Consumer thread only.
+     * Consumer thread only. A handler's exception propagates: the frames before it are freed, and the next read starts
+     * again at the frame that failed, so a handler that always fails on a frame stops the queue there.
      *
      * @return the number of frames read, 0 when none was published
      */

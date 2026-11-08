@@ -24,6 +24,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
 /**
  * The claim protocol of a multi-producer, single-consumer {@link ByteRingBuffer}, after Agrona's
@@ -45,6 +46,10 @@ import java.nio.ByteOrder;
  * caller's, written and read through the buffer in its own order.
  */
 public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
+
+    static {
+        ContendedPadding.check(AbstractMpScByteRingBuffer.class, "head", "tail");
+    }
 
     /**
      * Plain access only, which tolerates any alignment.
@@ -136,6 +141,7 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
     @Override
     public boolean write(int type, ByteBuffer src, int srcIndex, int length) {
         checkFrame(type, length, maxPayloadLength);
+        checkSource(src, srcIndex, length);
         int index = claim(type, HEADER + length);
         if (index < 0) {
             return false;
@@ -212,7 +218,6 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
             }
         } finally {
             if (consumed != head) {
-                head = consumed;
                 setHeadRelease(consumed);
             }
         }
@@ -221,7 +226,15 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
 
     @Override
     public int getSize() {
-        return (int) (getTailVolatile() - getHeadAcquire());
+        long headBefore = getHeadAcquire();
+        while (true) {
+            long tailSeen = getTailVolatile();
+            long headAfter = getHeadAcquire();
+            if (headAfter == headBefore) {
+                return (int) (tailSeen - headAfter);
+            }
+            headBefore = headAfter;
+        }
     }
 
     /**
@@ -251,6 +264,13 @@ public abstract class AbstractMpScByteRingBuffer implements ByteRingBuffer {
         if (length < 0 || length > maxPayloadLength) {
             throw new IllegalArgumentException("Payload length must be 0.." + maxPayloadLength + ", got " + length);
         }
+    }
+
+    /**
+     * To run before a claim: a queue frame claimed and never published blocks the consumer for good.
+     */
+    static void checkSource(ByteBuffer src, int srcIndex, int length) {
+        Objects.checkFromIndexSize(srcIndex, length, src.limit());
     }
 
     /**

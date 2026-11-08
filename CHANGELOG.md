@@ -11,6 +11,8 @@ matching `[x.y.z]:` link definition at the foot of the file.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-08
+
 ### Added
 
 - **Byte ring buffers**: variable-length frames of bytes in one off-heap buffer, written and read without
@@ -75,5 +77,6 @@ First public release.
 - All artifacts are signed, carry sources and javadoc, and are built reproducibly — the jars from a
   given tag are byte-identical to the published ones.
 
+[0.9.2]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.2
 [0.9.1]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.1
 [0.9.0]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.0

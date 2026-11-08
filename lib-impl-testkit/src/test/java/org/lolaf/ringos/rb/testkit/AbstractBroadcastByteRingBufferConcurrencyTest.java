@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.lolaf.ringos.rb.testkit.AbstractByteRingBufferConcurrencyTest.await;
@@ -68,7 +69,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         List<ReaderRun> readers = List.of(new ReaderRun(ring, producers, 0), new ReaderRun(ring, producers, 0),
                 new ReaderRun(ring, producers, 0));
 
-        run(ring, producers, framesPerProducer, readers, false);
+        run(ring, producers, framesPerProducer, readers, false, () -> true);
 
         for (ReaderRun reader : readers) {
             assertThat(reader.failure.get()).isNull();
@@ -89,7 +90,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         ReaderRun fast = new ReaderRun(ring, producers, 0);
         ReaderRun slow = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50));
 
-        run(ring, producers, 50_000, List.of(fast, slow), false);
+        run(ring, producers, 50_000, List.of(fast, slow), false, () -> slow.laps > 0 && slow.frames > 0);
 
         assertThat(fast.failure.get()).isNull();
         assertThat(slow.failure.get()).isNull();
@@ -110,7 +111,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         ReaderRun gating = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50), true);
         ReaderRun plain = new ReaderRun(ring, producers, TimeUnit.MICROSECONDS.toNanos(50), false);
 
-        run(ring, producers, framesPerProducer, List.of(gating, plain), true);
+        run(ring, producers, framesPerProducer, List.of(gating, plain), true, () -> true);
 
         assertThat(gating.failure.get()).isNull();
         assertThat(gating.laps).isZero();
@@ -163,7 +164,7 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
     }
 
     private void run(BroadcastByteRingBuffer ring, int producers, int framesPerProducer, List<ReaderRun> readers,
-                     boolean retrying) throws InterruptedException {
+                     boolean retrying, BooleanSupplier enoughWritten) throws InterruptedException {
         CountDownLatch start = new CountDownLatch(1);
         AtomicBoolean producersDone = new AtomicBoolean();
         CountDownLatch producing = new CountDownLatch(producers);
@@ -174,7 +175,9 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
                 Frame frame = new Frame();
                 RetryStrategy retryForever = RetryStrategy.idlingWhile(YieldingIdleStrategy.getInstance(), () -> true);
                 await(start);
-                for (int sequence = 0; sequence < framesPerProducer; sequence++) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+                for (int sequence = 0; sequence < framesPerProducer
+                        || (!enoughWritten.getAsBoolean() && System.nanoTime() < deadline); sequence++) {
                     int length = payloadLength(producer, sequence, MAX_PAYLOAD);
                     if (retrying) {
                         ring.writeRetrying(producer, length, FILL, frame.of(producer, sequence), retryForever);
@@ -208,8 +211,8 @@ public abstract class AbstractBroadcastByteRingBufferConcurrencyTest extends Abs
         private final int[] last;
         private final long pauseNanos;
         private final AtomicReference<String> failure = new AtomicReference<>();
-        private long frames;
-        private long laps;
+        private volatile long frames;
+        private volatile long laps;
         private long gaps;
         private long unreads;
 

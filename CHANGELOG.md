@@ -9,6 +9,35 @@ cut: the release workflow refuses to run without one, and the GitHub Release for
 with that section as its body. Write it in the commit that precedes the release, together with the
 matching `[x.y.z]:` link definition at the foot of the file.
 
+## [Unreleased]
+
+## [0.9.2] - 2026-11-08
+
+### Added
+
+- **Byte ring buffers**: variable-length frames of bytes in one off-heap buffer, written and read without
+  allocating, from `ByteRingBufferFactory`.
+  - `queue(capacity)`: any number of writer threads, one reader. A full queue refuses a write.
+  - `broadcast(capacity, producers)`: one writer thread (`ProducerType.SINGLE`) or several (`ProducerType.MULTI`), and
+    any number of independent readers. A write never waits: the oldest frames are overwritten, and a reader left
+    behind is told it was lapped instead of being handed a damaged frame. Readers can resume from a saved
+    position, and can fill a buffer with as many frames as fit: a frame too large for the room left is reported and
+    left for the next read. A reader can step back to the frame it last read with `unread()`.
+  - Readers that must not be lapped: a reader from `newGatingReader()` holds back every `writeRetrying`, which waits
+    for room as long as its `RetryStrategy` allows and then gives up without writing (`GATED`). Such a reader can
+    `unread()` unless a plain `write` overwrote the frame, and stops holding writes back once closed. A plain `write` still never waits.
+  - On Java 16 and later the frames are copied as fast as Agrona's equivalents; on Java 11 to 15 large frames are
+    several times slower. No JVM flags are needed to run them; `-XX:-RestrictContended -XX:ContendedPaddingWidth=64`
+    gives their best performance, and an error is logged when that padding is missing.
+- **`ProducerType`** (`SINGLE`, `MULTI`) says who may write to a buffer: it is what you pass to
+  `ByteRingBufferFactory.broadcast`, and `RingBufferFactory.AccessType.getProducerType()` gives the producer half of an
+  access type.
+- **New runtime artifact** `ringos-lib-impl-method-handle-16-provider`, part of `ringos-lib-impl-all`, so nothing
+  changes for applications depending on the aggregator.
+- **`BackoffIdleStrategy` can be woken**: `wakeup()`, from any thread, cuts its park short, so a producer that signals
+  after publishing no longer leaves the consumer asleep for up to its longest park (1 ms by default). It did nothing
+  before. A wakeup racing the first park after a `reset()` can still be missed.
+
 ## [0.9.1] - 2026-09-26
 
 ### Added
@@ -48,5 +77,6 @@ First public release.
 - All artifacts are signed, carry sources and javadoc, and are built reproducibly — the jars from a
   given tag are byte-identical to the published ones.
 
+[0.9.2]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.2
 [0.9.1]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.1
 [0.9.0]: https://github.com/lolaf-org/ringos/releases/tag/v0.9.0

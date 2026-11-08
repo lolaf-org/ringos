@@ -18,12 +18,8 @@ package org.lolaf.ringos.rb.spi;
 import org.lolaf.ringos.rb.RingBuffer;
 
 import jdk.internal.vm.annotation.Contended;
-import org.lolaf.ringos.unsafe.UnsafeOperations;
-import org.lolaf.ringos.unsafe.UnsafeOperationsApi;
 import org.lolaf.ringos.idling.IdleStrategy;
 import org.lolaf.ringos.idling.RetryStrategy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.function.Consumer;
@@ -34,7 +30,7 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
     public static final int BUFFER_PAD = 32;
 
     static {
-        checkContendedPaddingIsInEffect(LoggerFactory.getLogger(AbstractRingBuffer.class));
+        ContendedPadding.check(AbstractRingBuffer.class, "head", "tail");
     }
 
     protected final T[] buffer;
@@ -62,46 +58,6 @@ public abstract class AbstractRingBuffer<T> implements RingBuffer<T> {
             }
         }
         this.clearElementOnPoll = elementInstanceProducer == null;
-    }
-
-    /**
-     * Checks that {@link #head} and {@link #tail} really did land on separate cache lines, rather than checking for
-     * the JVM flags that would have put them there.
-     *
-     * <p>The flags are the means and the layout is the end, and reading the flags back is the less reliable of the
-     * two: {@code JAVA_TOOL_OPTIONS}, an {@code @argfile} and a container's own JAVA_OPTS all set them without
-     * appearing on the command line, and {@link ProcessHandle} reports no command line at all on a good number of
-     * Linux setups. Measuring the layout answers the only question worth asking, however the JVM was configured —
-     * and answers it for {@code -XX:-EnableContended} or a JDK that has moved the annotation too, neither of which
-     * a flag check would notice.
-     */
-    private static void checkContendedPaddingIsInEffect(Logger log) {
-        if (!UnsafeOperationsApi.isAvailable()) {
-            log.info("Unable to read this JVM's field layout, so @Contended padding could not be verified; set"
-                    + " -XX:-RestrictContended and -XX:ContendedPaddingWidth=<your L1 cache line size> for"
-                    + " optimal performance");
-            return;
-        }
-        UnsafeOperationsApi.ifAvailableDo(uo -> {
-            long headOffset = uo.objectFieldOffset(AbstractRingBuffer.class, "head");
-            long tailOffset = uo.objectFieldOffset(AbstractRingBuffer.class, "tail");
-            int cacheLineSize = uo.getL1CacheLineSize();
-            if (headOffset == UnsafeOperations.UNKNOWN_FIELD_OFFSET
-                    || tailOffset == UnsafeOperations.UNKNOWN_FIELD_OFFSET) {
-                log.info("Unable to read the ring buffer's field layout, so @Contended padding could not be"
-                        + " verified; set -XX:-RestrictContended and -XX:ContendedPaddingWidth={} for"
-                        + " optimal performance", cacheLineSize);
-                return;
-            }
-            // the JVM lays fields out as it pleases, so neither offset is necessarily the lower of the two
-            long separation = Math.abs(tailOffset - headOffset);
-            if (separation < cacheLineSize) {
-                // over-padding is not reported: a width wider than the line wastes memory but costs no contention
-                log.error("@Contended padding is not in effect: the ring buffer's head and tail are {} bytes apart"
-                        + " and so share a {}-byte cache line. Set -XX:-RestrictContended -XX:ContendedPaddingWidth={}" +
-                        " for optimal performance", separation, cacheLineSize, cacheLineSize);
-            }
-        });
     }
 
     /**

@@ -32,7 +32,9 @@ import java.util.concurrent.locks.LockSupport;
  * timer slack is around that figure, so it would round the park back up anyway. Going below it takes
  * {@link TimerSlackAwareBackoffIdleStrategy}, which narrows the slack on the idling thread first.
  *
- * <p>Each instance carries the escalation state of a single idling thread and must not be shared between threads.
+ * <p>Each instance carries the escalation state of a single idling thread and must not be shared between threads,
+ * but any thread may call {@link #wakeup()}, which cuts a park short. Only a wakeup racing the first park after a
+ * reset can be missed, costing that park, as with no wakeup.
  */
 public class BackoffIdleStrategy implements IdleStrategy {
 
@@ -69,6 +71,7 @@ public class BackoffIdleStrategy implements IdleStrategy {
     private long spins;
     private long yields;
     private long parkPeriodNs;
+    private volatile Thread parked;
 
     /**
      * Builds a strategy on the {@code DEFAULT_} constants of this class: 10 spins, then 5 yields, then parks
@@ -130,6 +133,9 @@ public class BackoffIdleStrategy implements IdleStrategy {
                 break;
 
             case PARKING:
+                if (parked == null) {
+                    parked = Thread.currentThread();
+                }
                 LockSupport.parkNanos(parkPeriodNs);
                 parkPeriodNs = Math.min(parkPeriodNs << 1, maxParkPeriodNs);
                 break;
@@ -137,7 +143,18 @@ public class BackoffIdleStrategy implements IdleStrategy {
     }
 
     @Override
+    public void wakeup() {
+        Thread thread = parked;
+        if (thread != null) {
+            LockSupport.unpark(thread);
+        }
+    }
+
+    @Override
     public void reset() {
+        if (parked != null) {
+            parked = null;
+        }
         spins = 0;
         yields = 0;
         parkPeriodNs = minParkPeriodNs;

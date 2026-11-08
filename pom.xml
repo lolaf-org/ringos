@@ -105,6 +105,7 @@
         <module>lib-impl-unsafe</module>
         <module>lib-impl-unsafe-11</module>
         <module>lib-impl-method-handle</module>
+        <module>lib-impl-method-handle-16</module>
         <module>lib-impl-all</module>
         <module>timer</module>
         <module>benchmarks</module>

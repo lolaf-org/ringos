@@ -19,7 +19,7 @@ the low-level primitives the three of them stand on.
 
 | Module | What it gives you | |
 |---|---|---|
-| [`lib-api`](lib-api/README.md) | Ring buffers, idle strategies, `FastThreadLocal` | [README](lib-api/README.md) |
+| [`lib-api`](lib-api/README.md) | Ring buffers, byte ring buffers, idle strategies, `FastThreadLocal` | [README](lib-api/README.md) |
 | [`timer`](timer/README.md) | Hashed wheel timer built on a ringos MPSC buffer | [README](timer/README.md) |
 | [`clib`](clib/README.md) | Linux timer slack and thread scheduling policy | [README](clib/README.md) |
 | [`ringos-unsafe-operations-api`](unsafe-operations-api/README.md) | Façade over the JDK-internal `Unsafe` operations | [README](unsafe-operations-api/README.md) |
@@ -184,6 +184,7 @@ Runtime implementations, reached through the two aggregators rather than named i
 | `ringos-lib-impl-unsafe` | `lib-impl-unsafe` | JDK 12+ with `jdk.internal.misc` opened |
 | `ringos-lib-impl-unsafe-11` | `lib-impl-unsafe-11` | JDK 11 with `jdk.internal.misc` opened |
 | `ringos-lib-impl-method-handle` | `lib-impl-method-handle` | every runtime, last resort |
+| `ringos-lib-impl-method-handle-16-impl` / `-provider` | `lib-impl-method-handle-16` | JDK 16+, byte ring buffers only |
 | `ringos-unsafe-operations-impl-all` | `unsafe-operations-impl-all` | *aggregator — depend on this one* |
 | `ringos-unsafe-operations-impl-11-14` | `unsafe-operations-impl-11-14` | JDK 11–14 |
 | `ringos-unsafe-operations-impl-15-24` | `unsafe-operations-impl-15-24` | JDK 15–24 |
@@ -198,7 +199,9 @@ checks that nothing is lost, nothing is delivered twice, and each producer's ele
 order. An implementation module subclasses them and supplies its own `RingBufferBuilder`, so a difference
 between the implementations fails the build instead of hiding in a copy of the tests that was only fixed in one
 place. `lib-impl-all` subclasses the contract test too, against whatever `RingBufferFactory` selects, under both
-of its surefire executions.
+of its surefire executions. The byte ring buffers have their own contract and concurrency classes in the same kit,
+run by both of their implementations and, to prove the tests themselves, by a simple locking reference
+implementation inside the kit.
 
 ## Building
 

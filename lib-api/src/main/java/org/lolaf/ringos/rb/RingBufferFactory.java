@@ -177,19 +177,29 @@ public class RingBufferFactory {
         /**
          * Single threaded poll(), single offer()
          */
-        SINGLE_CONSUMER_SINGLE_PRODUCER,
+        SINGLE_CONSUMER_SINGLE_PRODUCER(ProducerType.SINGLE),
         /**
          * Single threaded poll(), multithreaded offer()
          */
-        SINGLE_CONSUMER_MULTI_PRODUCER,
+        SINGLE_CONSUMER_MULTI_PRODUCER(ProducerType.MULTI),
         /**
          * Multithreaded poll(), single offer()
          */
-        MULTI_CONSUMER_SINGLE_PRODUCER,
+        MULTI_CONSUMER_SINGLE_PRODUCER(ProducerType.SINGLE),
         /**
          * Multithreaded poll(), multithreaded offer()
          */
-        MULTI_CONSUMER_MULTI_PRODUCER
+        MULTI_CONSUMER_MULTI_PRODUCER(ProducerType.MULTI);
+
+        private final ProducerType producerType;
+
+        AccessType(ProducerType producerType) {
+            this.producerType = producerType;
+        }
+
+        public ProducerType getProducerType() {
+            return producerType;
+        }
     }
 
     /**

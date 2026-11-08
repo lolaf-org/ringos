@@ -10,8 +10,9 @@ bundles:
 
 - `org.lolaf.ringos:ringos-lib-api` — the API you compile against: `RingBuffer`,
   `RingBufferFactory`, the builder SPI, the idle strategies
-- `org.lolaf.ringos:ringos-lib-impl-unsafe`, `…-lib-impl-unsafe-11`, `…-lib-impl-method-handle` —
-  the implementations, selected at runtime and not meant to be referenced directly
+- `org.lolaf.ringos:ringos-lib-impl-unsafe`, `…-lib-impl-unsafe-11`, `…-lib-impl-method-handle`,
+  `…-lib-impl-method-handle-16-provider` — the implementations, selected at runtime and not meant to be
+  referenced directly
 - `org.lolaf.ringos:ringos-unsafe-operations-impl-all` — the matching low-level memory access
 
 Sources: https://github.com/lolaf-org/ringos
